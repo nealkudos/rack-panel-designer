@@ -142,6 +142,7 @@ a{color:var(--accent)}
     <label class="field"><span>D-size screws</span><select id="sDfix"><option value="four">All 4 positions</option><option value="tlbr">2: top-L / bottom-R</option><option value="trbl">2: top-R / bottom-L</option></select></label>
     <label class="field"><span>Qty</span><input id="sQty" type="number" min="1" step="1"></label>
     <label class="field"><span>Drawn by</span><input id="sBy"></label>
+    <label class="field"><span>All text height mm</span><input id="sText" type="number" min="1" max="30" step="0.5" placeholder="mixed" title="Sets every engraved label and free text on this panel"></label>
     <label class="field"><span>Device shelf</span><select id="sShelf"><option value="0">None (panel only)</option><option value="1">Tray shelf behind panel</option></select></label>
     <label class="field"><span>Shelf depth mm</span><input id="sDepth" type="number" min="50" max="900" step="1"></label>
   </section>
@@ -595,7 +596,7 @@ function applyLabelSize(items,size,incText){
   if(!(size>=1&&size<=30)){toast('Enter a text height between 1 and 30 mm');return;}
   pushUndo(); let n=0;
   for(const i of items){ if(isPL(i)){i.label=i.label||{text:'',pos:i.kind==='device'?'none':'below',size:3};i.label.size=size;n++;} else if(incText&&i.kind==='text'){i.size=size;n++;} }
-  persist(); renderAll(); toast(`Text height set to ${size} mm on ${n} item${n===1?'':'s'}`);
+  persist(); renderAll(); toast(`All text set to ${size} mm high (${n} item${n===1?'':'s'})`);
 }
 /* ============ Spacing ============ */
 // Rows = connectors/devices whose centres share a Y (±1 mm). Spans are between neighbours, left to right.
@@ -847,13 +848,13 @@ function renderInspector(){
           <p class="note" style="margin:6px 0 0">Equal spacing keeps the outer two items where they are. Set pitch centres the row on its current middle.</p></div>`;})()}
       ${p.items.some(i=>isPL(i)||i.kind==='text')?`<div><h3 style="font-size:15px;margin-bottom:6px">Engraved text size</h3>
         <div class="two">${numField('allLs','Text height mm',(()=>{const v=[...new Set(p.items.filter(i=>isPL(i)&&i.label?.text).map(i=>i.label.size||3))];return v.length===1?v[0]:'';})(),0.5)}
-        <label class="field"><span>Apply to</span><select id="allLsWho"><option value="labels">All connector labels</option><option value="all">Labels and free text</option></select></label></div>
+        <span></span></div>
         <button class="btn sm" id="allLsGo">Apply to all</button></div>`:''}
       <div><h3 style="font-size:15px;margin-bottom:6px">Checks</h3>${warnHtml(list)}</div>
       <label class="field"><span>Notes for the maker</span><textarea id="pNotes" placeholder="e.g. Engraving infill white. Deburr all holes.">${esc(p.notes||'')}</textarea></label>
       <p class="note" style="margin:0">Positions are measured to each part's centre from the panel's bottom-left corner, viewed from the front. The DXF uses the same origin.</p>`;
     $('pNotes').addEventListener('change',e=>{pushUndo();p.notes=e.target.value;persist();});
-    $('allLsGo')?.addEventListener('click',()=>applyLabelSize(p.items,+$('allLs').value,$('allLsWho').value==='all'));
+    $('allLsGo')?.addEventListener('click',()=>applyLabelSize(p.items,+$('allLs').value,true));
     if(p.shelf?.on){const su=(k,fn)=>e=>{pushUndo();p.shelf[k]=fn(e.target.value);persist();renderAll();};
       $('shLip').addEventListener('change',su('lip',v=>Math.max(0,+v)));$('shSide').addEventListener('change',su('side',v=>Math.max(0,+v)));
       $('shStraps').addEventListener('change',su('straps',v=>v==='1'));$('shVents').addEventListener('change',su('vents',v=>v==='1'));}
@@ -1012,10 +1013,12 @@ $('schedBody').addEventListener('click',e=>{const r=e.target.closest('[data-row]
 for(let u=1;u<=8;u++) $('sU').insertAdjacentHTML('beforeend',`<option value="${u}">${u}U (${(u*44.45-0.8).toFixed(2)})</option>`);
 const bind=[['sName','name'],['sJob','job'],['sClient','client'],['sRack','rack'],['sU','U',Number],['sThick','thick'],['sFinish','finish'],['sFix','fix'],['sDfix','dfix'],['sQty','qty',Number],['sBy','by']];
 function syncSettings(){const p=P();if(!p.shelf)p.shelf=defShelf();for(const [id,k] of bind) $(id).value=p[k]??'';$('sShelf').value=p.shelf.on?'1':'0';$('sDepth').value=p.shelf.depth;$('sDepth').disabled=!p.shelf.on;
+  {const v=[...new Set(p.items.flatMap(i=>isPL(i)&&i.label?.text?[i.label.size||3]:i.kind==='text'?[i.size]:[]))];if(document.activeElement!==$('sText'))$('sText').value=v.length===1?v[0]:'';}
   $('panelSel').innerHTML=panels.map((x,i)=>`<option value="${i}"${i===cur?' selected':''}>${esc(x.name||'Untitled')}</option>`).join('');}
 $('sShelf').addEventListener('change',e=>{const p=P();pushUndo();p.shelf.on=e.target.value==='1';
   if(p.shelf.on){let need=0;for(const it of p.items)if(it.kind==='device')need=Math.max(need,+p.thick+it.h+2);while(panelH(p)<need&&p.U<8)p.U++;applySit(p);}
   persist();renderAll();});
+$('sText').addEventListener('change',e=>{const v=+e.target.value;if(!e.target.value)return;applyLabelSize(P().items,v,true);});
 $('sDepth').addEventListener('change',e=>{const p=P();pushUndo();p.shelf.depth=Math.max(50,Math.min(900,+e.target.value||250));persist();renderAll();});
 for(const [id,k,cast] of bind){$(id).addEventListener('change',e=>{pushUndo();P()[k]=cast?cast(e.target.value):e.target.value;persist();renderAll();if(k==='name')syncSettings();});}
 $('panelSel').addEventListener('change',e=>{cur=+e.target.value;sel.clear();undo=[];redo=[];persist();renderAll();});
