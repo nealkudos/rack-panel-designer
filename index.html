@@ -71,7 +71,7 @@ textarea{resize:vertical;min-height:60px}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
 .dot.high{background:var(--ok)} .dot.med{background:var(--warn)} .dot.low{background:var(--bad)}
 .chip{font-family:var(--f-display);font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:1px 7px;border-radius:99px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
-.chip.high{background:var(--ok-soft);color:var(--ok)} .chip.med{background:var(--warn-soft);color:var(--warn)} .chip.low{background:var(--bad-soft);color:var(--bad)}
+.chip.high{background:var(--ok-soft);color:var(--ok)} .chip.med{background:var(--warn-soft);color:var(--warn)} .chip.low{background:var(--bad-soft);color:var(--bad)} .chip.dev{background:var(--accent-soft);color:var(--accent)} .dot.dev{background:var(--accent)}
 .lib-foot{border-top:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 details summary{cursor:pointer;font-family:var(--f-display);text-transform:uppercase;letter-spacing:.08em;font-weight:600;font-size:13px}
 .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
@@ -142,6 +142,8 @@ a{color:var(--accent)}
     <label class="field"><span>D-size screws</span><select id="sDfix"><option value="four">All 4 positions</option><option value="tlbr">2: top-L / bottom-R</option><option value="trbl">2: top-R / bottom-L</option></select></label>
     <label class="field"><span>Qty</span><input id="sQty" type="number" min="1" step="1"></label>
     <label class="field"><span>Drawn by</span><input id="sBy"></label>
+    <label class="field"><span>Device shelf</span><select id="sShelf"><option value="0">None (panel only)</option><option value="1">Tray shelf behind panel</option></select></label>
+    <label class="field"><span>Shelf depth mm</span><input id="sDepth" type="number" min="50" max="900" step="1"></label>
   </section>
 
   <div class="work">
@@ -289,6 +291,12 @@ add('VEAM','pldrn','Powerlock panel drain (female) 400/660A','VEAM NPDFT-…-T4/
   add('VEAM','cir'+sh.toLowerCase(),`CIR / MIL-5015 receptacle, shell ${sh}`,`VEAM CIR02 · MS3102 shell ${sh}`,{cut:[circ(d)],holes:q4(R,R,T),flange:{w:S,h:S,r:1.5},desc:`Ø${d} + 4×Ø${T} on ${R} square`,conf:'med',
     note:`Square-flange box-mount receptacle. Hole sized to pass the coupling thread so it suits front or rear mounting.${['32','36'].includes(sh)?' Ten47 Tourline audio "VEAM" multipins may use countersunk holes — check the part drawing.':''}`,src:'https://in.c.misumi-ec.com/book/DDK1_ENG_E01/pdf/0065.pdf'});
 });
+// Devices (boxes for the shelf / rack-mount builder). Sizes are W × H × D in mm.
+const DEV=(id,name,pn,w,h,d,note)=>add('Devices','dv_'+id,name,pn,{device:{w,h,d},cut:[],holes:[],flange:{w,h,r:0},conf:'dev',desc:`Device ${w} × ${h} × ${d} mm`,note});
+DEV('custom','Custom device box','Set size in the inspector',200,44,200,'Enter the real width, height and depth from the maker\'s spec sheet.');
+DEV('macmini4','Mac mini (M4)','127 × 50 × 127',127,50,127,'Apple spec: 12.7 cm square, 5.0 cm tall.');
+DEV('macstudio','Mac Studio','197 × 95 × 197',197,95,197,'Apple spec: 19.7 cm square, 9.5 cm tall.');
+DEV('appletv','Apple TV 4K','93 × 31 × 93',93,31,93,'Apple spec: 9.3 cm square, 3.1 cm tall.');
 // D-sub
 const DSUB=(id,name,pn,pitch,top,fw)=>add('D-sub','ds'+id,name,pn,{cut:[{t:'trap',top,bot:+(top-2*11.18*Math.tan(10*Math.PI/180)).toFixed(2),h:11.18}],holes:h2(pitch,3.2),flange:{w:fw,h:12.5,r:1},desc:`trapezoid ${top} top × 11.18 (10° sides) + 2×Ø3.2 at ${pitch} pitch`,conf:'high',src:'https://spectrumcontrol.com/asset/d-sub-board-panel-cutouts.pdf'});
 DSUB('9','D-sub 9 / HD-15 (VGA)','DE-9 / DE-15',24.99,19.74,30.8);
@@ -332,7 +340,17 @@ let showNames=true; try{showNames=localStorage.getItem(LS+'-names')!=='0';}catch
 let undo=[], redo=[];
 const uid=()=>Math.random().toString(36).slice(2,9);
 const P=()=>panels[cur];
-const defOf=it=>LIB.find(d=>d.id===it.part)||customs.find(d=>d.id===it.part);
+const isPL=i=>i.kind==='part'||i.kind==='device';
+const defOf=it=>it.kind==='device'?devDef(it):(LIB.find(d=>d.id===it.part)||customs.find(d=>d.id===it.part));
+// A device box behaves like a part: its "flange" is the device front, its cutout is an optional window.
+function devDef(it){
+  const p=P(), c=it.clr??1, r=it.r??1.5; let y1=-it.h/2-c, y2=it.h/2+c; let clipped=false;
+  if(p&&p.shelf?.on&&it.sit!==false){const minY=(+p.thick+3)-it.y; if(y1<minY){y1=minY;clipped=true;}}
+  const ww=+(it.w+2*c).toFixed(2), wh=+(y2-y1).toFixed(2);
+  return {cat:'Devices',id:'dev',device:true,name:it.name||'Device',short:it.name||'Device',pn:`${f2(it.w)} × ${f2(it.h)} × ${f2(it.d)} mm`,
+    cut:it.win!==false?[rect(ww,wh,Math.min(r,ww/2,wh/2),0,+((y1+y2)/2).toFixed(3))]:[],holes:[],flange:{w:it.w,h:it.h,r:0},conf:'dev',
+    desc:it.win!==false?`Window ${f2(ww)} × ${f2(wh)} R${r}${clipped?' (bottom kept 3 mm above the shelf fold)':''} — device ${f2(it.w)} × ${f2(it.h)} + ${c} clearance`:'No cutout — device sits behind a blank panel'};
+}
 const allDefs=()=>LIB.concat(customs);
 
 function examplePanel(){
@@ -344,7 +362,8 @@ function examplePanel(){
   parts.forEach((pt,i)=>p.items.push({id:uid(),kind:'part',part:pt,x:+(x0+i*pitch).toFixed(2),y,rot:0,label:{text:labels[i],pos:'below',size:3}}));
   return p;
 }
-function blankPanel(name){return {id:uid(),name:name||'New panel',job:'',client:'',rack:'19',U:1,thick:'2',finish:'black',fix:'slot',dfix:'four',qty:1,by:'Neal Chauhan',notes:'',items:[]};}
+function blankPanel(name){return {id:uid(),name:name||'New panel',job:'',client:'',rack:'19',U:1,thick:'2',finish:'black',fix:'slot',dfix:'four',qty:1,by:'Neal Chauhan',notes:'',items:[],shelf:defShelf()};}
+function defShelf(){return {on:false,depth:250,lip:20,side:15,straps:true,vents:false};}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(LS)||'null'); if(s&&Array.isArray(s.panels)&&s.panels.length){panels=s.panels;cur=Math.min(s.cur||0,panels.length-1);customs=s.customs||[];logos=s.logos||[];return;}}catch(e){}
   panels=[examplePanel()];cur=0;
@@ -539,10 +558,29 @@ async function traceRasterLogo(file){
   return {id:'lg_'+uid(),name:file.name.replace(/\.(png|jpe?g|webp|gif)$/i,''),ar:+(bh/bw).toFixed(5),polys,traced:true};
 }
 
+/* ============ Device shelf ============ */
+function applySit(p){ if(!p.shelf?.on) return; for(const it of p.items) if(it.kind==='device'&&it.sit!==false) it.y=+(+p.thick+it.h/2).toFixed(2); }
+// Plan view of the tray. x = same as panel x, y = depth from the back of the faceplate (0) towards the rear.
+function shelfGeom(p){
+  const sh=p.shelf, W=rackW(p), SW=+(opening(p)-6).toFixed(2), x0=+((W-SW)/2).toFixed(2), D=+sh.depth, lip=+sh.lip, side=+sh.side, t=+p.thick;
+  const outline=[[x0-side,0],[x0+SW+side,0],[x0+SW+side,D],[x0+SW,D],[x0+SW,D+lip],[x0,D+lip],[x0,D],[x0-side,D]];
+  const bends=[[x0,0,x0,D],[x0+SW,0,x0+SW,D],[x0,D,x0+SW,D]];
+  const devs=[],slots=[],vents=[];
+  for(const it of p.items.filter(i=>i.kind==='device')){
+    const y1=it.win!==false?0:t+2, y2=y1+it.d, xa=it.x-it.w/2, xb=it.x+it.w/2;
+    devs.push({it,x1:xa,x2:xb,y1,y2});
+    if(sh.straps!==false){const yc=(y1+Math.min(y2,D))/2;for(const sx of [xa-6,xb+6]) if(sx-2.5>x0+3&&sx+2.5<x0+SW-3) slots.push({x:sx,y:yc,w:5,h:26});}
+    if(sh.vents){const vy1=y1+15,vy2=Math.min(y2,D)-15;if(it.w>=50&&vy2-vy1>=30){const L=Math.min(120,vy2-vy1),yc=(vy1+vy2)/2;for(let vx=xa+15;vx<=xb-15+0.01;vx+=10)vents.push({x:vx,y:yc,w:4,h:L});}}
+  }
+  // drop strap slots that would land inside another device's footprint
+  const clear=slots.filter(sl=>!devs.some(d=>sl.x+sl.w/2+1>d.x1&&sl.x-sl.w/2-1<d.x2&&sl.y+sl.h/2>d.y1&&sl.y-sl.h/2<d.y2));
+  return {SW,x0,D,lip,side,outline,bends,devs,slots:clear,vents};
+}
+
 /* ============ Checks ============ */
 function checks(p){
   const W=rackW(p),H=panelH(p),op=opening(p),rl=(W-op)/2,rr=W-rl,out=[],bad=new Set();
-  const parts=p.items.filter(i=>i.kind==='part').map(i=>({i,g:geomOf(i,p)})).filter(o=>o.g);
+  const parts=p.items.filter(i=>isPL(i)).map(i=>({i,g:geomOf(i,p)})).filter(o=>o.g);
   const ref=refMap(p);
   for(const {i,g} of parts){
     const b=g.bbox, r=ref.get(i.id);
@@ -550,6 +588,10 @@ function checks(p){
     else if(b.x1<rl||b.x2>rr){out.push({lvl:'bad',id:i.id,msg:`${r} ${g.def.name}: sits over the rack rail. Keep it between ${rl.toFixed(1)} and ${rr.toFixed(1)} mm.`});bad.add(i.id);}
     if(g.def.conf==='low') out.push({lvl:'warn',id:i.id,msg:`${r} ${g.def.name}: cutout not confirmed. Check against the maker's drawing before sending.`});
   }
+  if(p.shelf?.on){const sg=shelfGeom(p);
+    for(const dv of sg.devs){const r=ref.get(dv.it.id),nm=dv.it.name||'Device';
+      if(dv.y2>sg.D) out.push({lvl:'warn',id:dv.it.id,msg:`${r} ${nm}: ${f2(dv.y2-sg.D)} mm deeper than the ${sg.D} mm shelf — it will overhang the back.`});
+      if(dv.x1<sg.x0||dv.x2>sg.x0+sg.SW){out.push({lvl:'bad',id:dv.it.id,msg:`${r} ${nm}: wider than the shelf at this position (shelf is ${f2(sg.SW)} mm between the side flanges).`});bad.add(dv.it.id);}}}
   for(const i of p.items.filter(i=>i.kind==='logo')){const g=logoGeom(i);if(!g)continue;const b=g.bbox;
     if(b.x1<0.5||b.x2>W-0.5||b.y1<0.5||b.y2>H-0.5){out.push({lvl:'bad',id:i.id,msg:`${ref.get(i.id)} logo runs off the panel. Make it smaller or move it.`});bad.add(i.id);}
     const hit=parts.find(o=>!(o.g.bbox.x2<=b.x1||b.x2<=o.g.bbox.x1||o.g.bbox.y2<=b.y1||b.y2<=o.g.bbox.y1));
@@ -563,8 +605,9 @@ function checks(p){
 }
 function refMap(p){
   const m=new Map(); let n=0,t=0,b=0;
-  const parts=p.items.filter(i=>i.kind==='part').slice().sort((a,c)=>(Math.abs(a.y-c.y)>8?c.y-a.y:a.x-c.x));
-  parts.forEach(i=>m.set(i.id,'C'+String(++n).padStart(2,'0')));
+  const ord=(a,c)=>(Math.abs(a.y-c.y)>8?c.y-a.y:a.x-c.x);
+  p.items.filter(i=>i.kind==='part').slice().sort(ord).forEach(i=>m.set(i.id,'C'+String(++n).padStart(2,'0')));
+  let dv=0; p.items.filter(i=>i.kind==='device').slice().sort(ord).forEach(i=>m.set(i.id,'D'+String(++dv).padStart(2,'0')));
   p.items.filter(i=>i.kind==='text').forEach(i=>m.set(i.id,'T'+String(++t).padStart(2,'0')));
   p.items.filter(i=>i.kind==='box').forEach(i=>m.set(i.id,'B'+String(++b).padStart(2,'0')));
   let l=0; p.items.filter(i=>i.kind==='logo').forEach(i=>m.set(i.id,'L'+String(++l).padStart(2,'0')));
@@ -595,6 +638,7 @@ function shapeSvg(k,H,attrs){
 let guide=null;
 function renderCanvas(){
   const p=P(),W=rackW(p),H=panelH(p),fin=FIN[p.finish]||FIN.black,op=opening(p),rl=(W-op)/2;
+  applySit(p);
   const pad=10, vbW=W+pad*2, vbH=H+pad*2;
   svg.setAttribute('viewBox',`${-pad} ${-pad} ${vbW} ${vbH}`);
   const stageW=$('stage').clientWidth-36;
@@ -616,7 +660,7 @@ function renderCanvas(){
   // items
   const ref=refMap(p);
   for(const it of p.items){
-    if(it.kind==='part'){
+    if(isPL(it)){
       const g=geomOf(it,p); if(!g) continue;
       const b=g.bbox;
       if(view==='fit'){
@@ -657,7 +701,7 @@ function renderCanvas(){
   }
   // part-name annotations (drawing notes only — never engraved or cut)
   if(showNames){
-    for(const it of p.items){ if(it.kind!=='part') continue; const g=geomOf(it,p); if(!g) continue;
+    for(const it of p.items){ if(!isPL(it)) continue; const g=geomOf(it,p); if(!g) continue;
       // aim for ~13px on screen at any zoom, but never wider or taller than the connector itself
       let nm=shortName(g.def);
       const fitW=Math.max(g.fw,10)*0.92/(Math.max(nm.length,3)*0.5), fitH=g.fh*0.8/2.3;
@@ -706,12 +750,14 @@ function renderLib(){
   $('libCount').textContent=allDefs().length+' parts';
   $('rPart').innerHTML=allDefs().map(d=>`<option value="${d.id}"${d.id===libCur?' selected':''}>${esc(d.name)} — ${esc(d.pn)}</option>`).join('');
 }
-const confText=c=>c==='high'?'Datasheet':c==='med'?'Check':'Verify';
+const confText=c=>c==='high'?'Datasheet':c==='med'?'Check':c==='dev'?'Device':'Verify';
 function shortName(d){return d.short||d.name.replace(/\s*\(.*?\)/g,'').split(',')[0].trim();}
 
 function addPart(id,x,y){
   const p=P(),def=allDefs().find(d=>d.id===id); if(!def) return;
   pushUndo();
+  const tmpl=def.device?{kind:'device',name:def.id==='dv_custom'?'Device':def.name.replace(/\s*\(.*?\)/g,''),w:def.device.w,h:def.device.h,d:def.device.d,win:true,clr:1,r:1.5,sit:true}:{kind:'part',part:id};
+  if(def.device){const need=p.shelf?.on?+p.thick+def.device.h+2:def.device.h+6;let U=p.U;while(panelH({...p,U})<need&&U<8)U++;if(U!==p.U){p.U=U;setTimeout(()=>toast(`Panel raised to ${U}U to fit ${def.name}`),0);}}
   const H=panelH(p),W=rackW(p);
   if(x==null){ // find a free spot on the centre row, scanning out from the middle
     y=Math.min(H/2+ (def.flange.h<H-10?2.5:0), H-def.flange.h/2-1); if(y<def.flange.h/2+1) y=H/2;
@@ -720,13 +766,14 @@ function addPart(id,x,y){
     const fh=def.flange.h, ycands=[y];
     for(let dy=2.5;dy<H/2;dy+=2.5){for(const v of [y+dy,y-dy]) if(v-fh/2>=1&&v+fh/2<=H-1) ycands.push(v);}
     x=W/2; let found=false;
-    for(const yy of ycands){ for(const c of cands){const t={id:'_',kind:'part',part:id,x:c,y:yy,rot:0};const g=geomOf(t,p);
+    for(const yy of ycands){ for(const c of cands){const t=Object.assign({},tmpl,{id:'_',x:c,y:yy,rot:0});if(t.kind==='device'&&p.shelf?.on)t.y=+p.thick+t.h/2;const g=geomOf(t,p);
       if(g.bbox.x1<rl||g.bbox.x2>W-rl) continue;
-      if(!p.items.some(o=>{if(o.kind!=='part')return false;const og=geomOf(o,p);if(!og)return false;return !(og.bbox.x2+2<=g.bbox.x1||g.bbox.x2+2<=og.bbox.x1||og.bbox.y2+1<=g.bbox.y1||g.bbox.y2+1<=og.bbox.y1);})){x=c;y=yy;found=true;break;}}
+      if(!p.items.some(o=>{if(!isPL(o))return false;const og=geomOf(o,p);if(!og)return false;return !(og.bbox.x2+2<=g.bbox.x1||g.bbox.x2+2<=og.bbox.x1||og.bbox.y2+1<=g.bbox.y1||g.bbox.y2+1<=og.bbox.y1);})){x=c;y=yy;found=true;break;}}
       if(found) break; }
     if(!found) setTimeout(()=>toast('No free space left — placed in the centre. Try a taller panel.'),0);
   }
-  const it={id:uid(),kind:'part',part:id,x:+(+x).toFixed(2),y:+(+y).toFixed(2),rot:0,label:{text:'',pos:'below',size:3}};
+  const it=Object.assign({},tmpl,{id:uid(),x:+(+x).toFixed(2),y:+(+y).toFixed(2),rot:0,label:{text:'',pos:def.device?'none':'below',size:3}});
+  applySit(p);
   p.items.push(it); sel=new Set([it.id]); libCur=id; renderAll(); renderLib();
 }
 
@@ -738,13 +785,21 @@ function renderInspector(){
   if(items.length===0){
     $('inspTitle').textContent='Panel';
     const W=rackW(p),H=panelH(p);
-    const parts=p.items.filter(i=>i.kind==='part');
+    const parts=p.items.filter(i=>isPL(i));
     const lows=new Set(parts.filter(i=>defOf(i)?.conf==='low').map(i=>defOf(i).name));
     el.innerHTML=`<dl class="kv"><dt>Size</dt><dd>${f2(W)} × ${f2(H)} mm (${p.U}U)</dd><dt>Material</dt><dd>${p.thick} mm aluminium</dd><dt>Finish</dt><dd>${$('sFinish').selectedOptions[0]?.text||''}, engraved</dd><dt>Rack holes</dt><dd>${holePitch(p)} mm centres, ${p.fix==='slot'?'10 × 6.5 slots':'Ø6.5'}</dd><dt>Clear width</dt><dd>${f2(opening(p))} mm between rails</dd><dt>Parts</dt><dd>${parts.length} connectors, ${p.items.length-parts.length} engraving items</dd></dl>
+      ${p.shelf?.on?`<div><h3 style="font-size:15px;margin-bottom:6px">Device shelf</h3>
+        <dl class="kv"><dt>Tray</dt><dd>${f2(shelfGeom(p).SW)} wide × ${p.shelf.depth} deep</dd></dl>
+        <div class="two">${numField('shLip','Rear lip mm',p.shelf.lip,1)}${numField('shSide','Side flanges mm',p.shelf.side,1)}</div>
+        <div class="two"><label class="field"><span>Strap slots</span><select id="shStraps"><option value="1"${p.shelf.straps!==false?' selected':''}>Yes, each side</option><option value="0"${p.shelf.straps===false?' selected':''}>No</option></select></label>
+        <label class="field"><span>Vent slots</span><select id="shVents"><option value="0"${!p.shelf.vents?' selected':''}>No</option><option value="1"${p.shelf.vents?' selected':''}>Under devices</option></select></label></div></div>`:''}
       <div><h3 style="font-size:15px;margin-bottom:6px">Checks</h3>${warnHtml(list)}</div>
       <label class="field"><span>Notes for the maker</span><textarea id="pNotes" placeholder="e.g. Engraving infill white. Deburr all holes.">${esc(p.notes||'')}</textarea></label>
       <p class="note" style="margin:0">Positions are measured to each part's centre from the panel's bottom-left corner, viewed from the front. The DXF uses the same origin.</p>`;
     $('pNotes').addEventListener('change',e=>{pushUndo();p.notes=e.target.value;persist();});
+    if(p.shelf?.on){const su=(k,fn)=>e=>{pushUndo();p.shelf[k]=fn(e.target.value);persist();renderAll();};
+      $('shLip').addEventListener('change',su('lip',v=>Math.max(0,+v)));$('shSide').addEventListener('change',su('side',v=>Math.max(0,+v)));
+      $('shStraps').addEventListener('change',su('straps',v=>v==='1'));$('shVents').addEventListener('change',su('vents',v=>v==='1'));}
     return;
   }
   if(items.length>1){
@@ -756,7 +811,39 @@ function renderInspector(){
     return;
   }
   const it=items[0];
-  if(it.kind==='part'){
+  if(it.kind==='device'){
+    const def=defOf(it), shelfOn=!!p.shelf?.on, sitting=shelfOn&&it.sit!==false;
+    $('inspTitle').textContent=ref.get(it.id)+' · '+(it.name||'Device');
+    el.innerHTML=`<div class="row"><span class="chip dev"><i class="dot dev"></i>Device</span><span class="mono note">${esc(def.pn)}</span></div>
+      <label class="field"><span>Device name</span><input id="dName" value="${esc(it.name||'')}" placeholder="e.g. Mac mini, ULXD4"></label>
+      <div class="two">${numField('dW','Width mm',f2(it.w),0.5)}${numField('dH','Height mm',f2(it.h),0.5)}</div>
+      <div class="two">${numField('dD','Depth mm',f2(it.d),1)}<label class="field"><span>Front</span><select id="dWin"><option value="1"${it.win!==false?' selected':''}>Window cut in panel</option><option value="0"${it.win===false?' selected':''}>Blank panel in front</option></select></label></div>
+      <div class="two">${numField('dClr','Window clearance',it.clr??1,0.1)}${numField('dR','Window corner R',it.r??1.5,0.5)}</div>
+      <div class="two">${numField('iX','X mm',f2(it.x))}${numField('iY','Y mm',f2(it.y))}</div>
+      ${shelfOn?`<label class="field"><span>Position</span><select id="dSit"><option value="1"${it.sit!==false?' selected':''}>Sits on the shelf</option><option value="0"${it.sit===false?' selected':''}>Free (raised on blocks)</option></select></label>`:''}
+      <dl class="kv"><dt>Cutout</dt><dd>${esc(def.desc)}</dd></dl>
+      <label class="field"><span>Engraved label</span><input id="iLab" value="${esc(it.label?.text||'')}" placeholder="e.g. PLAYBACK A"></label>
+      <div class="two"><label class="field"><span>Label position</span><select id="iLpos">${['below','above','left','right','none'].map(v=>`<option${(it.label?.pos||'none')===v?' selected':''}>${v}</option>`).join('')}</select></label>${numField('iLsize','Text height mm',it.label?.size||3,0.5)}</div>
+      <div class="row"><button class="btn sm" data-act="dupe">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>
+      <p class="note" style="margin:0">Use the size from the maker's spec sheet. The window is the device front plus the clearance on every side.</p>
+      ${warnHtml(list.filter(w=>w.id===it.id),true)}`;
+    if(sitting) $('iY').disabled=true;
+    const upd=(fn)=>e=>{pushUndo();fn(e.target.value);
+      if(it.kind==='device'){let need=shelfOn&&it.sit!==false?+p.thick+it.h+2:it.h+2;while(panelH(p)<need&&p.U<8)p.U++;}
+      persist();renderAll();};
+    $('dName').addEventListener('focus',()=>pushUndo());
+    $('dName').addEventListener('input',e=>{it.name=e.target.value;persist();renderCanvas();renderSchedule();});
+    $('dW').addEventListener('change',upd(v=>it.w=Math.max(5,+v)));$('dH').addEventListener('change',upd(v=>it.h=Math.max(5,+v)));$('dD').addEventListener('change',upd(v=>it.d=Math.max(5,+v)));
+    $('dWin').addEventListener('change',upd(v=>it.win=v==='1'));$('dClr').addEventListener('change',upd(v=>it.clr=Math.max(0,+v)));$('dR').addEventListener('change',upd(v=>it.r=Math.max(0,+v)));
+    $('iX').addEventListener('change',upd(v=>it.x=+v));$('iY').addEventListener('change',upd(v=>it.y=+v));
+    $('dSit')?.addEventListener('change',upd(v=>it.sit=v==='1'));
+    it.label=it.label||{text:'',pos:'none',size:3};
+    $('iLab').addEventListener('focus',()=>pushUndo());
+    $('iLab').addEventListener('input',e=>{it.label.text=e.target.value;if(it.label.pos==='none'&&e.target.value){it.label.pos='above';$('iLpos').value='above';}persist();renderCanvas();renderSchedule();});
+    $('iLpos').addEventListener('change',upd(v=>it.label.pos=v));$('iLsize').addEventListener('change',upd(v=>it.label.size=Math.max(1,+v)));
+    return;
+  }
+  if(isPL(it)){
     const def=defOf(it),g=geomOf(it,p);
     $('inspTitle').textContent=ref.get(it.id)+' · '+def.name;
     el.innerHTML=`<div class="row"><span class="chip ${def.conf}"><i class="dot ${def.conf}"></i>${confText(def.conf)}</span><span class="mono note">${esc(def.pn)}</span></div>
@@ -843,12 +930,12 @@ function renderSchedule(){
   const p=P(),ref=refMap(p),{bad}=checks(p);
   const rows=p.items.slice().sort((a,b)=>ref.get(a.id).localeCompare(ref.get(b.id)));
   $('schedBody').innerHTML=rows.map(it=>{
-    const d=it.kind==='part'?defOf(it):null;
+    const d=isPL(it)?defOf(it):null;
     const lgG=it.kind==='logo'?logoGeom(it):null;
-    const name=it.kind==='part'?(d?.name||'?'):it.kind==='text'?'Engraved text':it.kind==='logo'?'Engraved logo':'Engraved box';
-    const pn=it.kind==='part'?(d?.pn||''):it.kind==='text'?`${it.size} mm high`:it.kind==='logo'?(lgG?`${lgG.L.name} · ${f2(lgG.w)} × ${f2(lgG.h)}`:''):`${f2(it.w)} × ${f2(it.h)}`;
-    const lab=it.kind==='part'?(it.label?.text||''):it.kind==='text'?it.text:'';
-    const st=it.kind==='logo'&&bad.has(it.id)?`<span class="chip low">Off panel</span>`:it.kind==='part'?(bad.has(it.id)?`<span class="chip low">Clash</span>`:`<span class="chip ${d?.conf}">${confText(d?.conf)}</span>`):'';
+    const name=isPL(it)?(d?.name||'?'):it.kind==='text'?'Engraved text':it.kind==='logo'?'Engraved logo':'Engraved box';
+    const pn=isPL(it)?(d?.pn||''):it.kind==='text'?`${it.size} mm high`:it.kind==='logo'?(lgG?`${lgG.L.name} · ${f2(lgG.w)} × ${f2(lgG.h)}`:''):`${f2(it.w)} × ${f2(it.h)}`;
+    const lab=isPL(it)?(it.label?.text||''):it.kind==='text'?it.text:'';
+    const st=it.kind==='logo'&&bad.has(it.id)?`<span class="chip low">Off panel</span>`:isPL(it)?(bad.has(it.id)?`<span class="chip low">Clash</span>`:`<span class="chip ${d?.conf}">${confText(d?.conf)}</span>`):'';
     return `<tr data-row="${it.id}" class="${sel.has(it.id)?'sel':''}"><td class="mono">${ref.get(it.id)}</td><td>${esc(name)}</td><td class="mono" style="font-size:12px">${esc(pn)}</td><td class="num">${f2(it.x)}</td><td class="num">${f2(it.y)}</td><td>${esc(lab)}</td><td>${st}</td></tr>`;
   }).join('')||`<tr><td colspan="7" class="note">Click a part in the library to add it to the panel.</td></tr>`;
   const {list}=checks(p); const nb=list.filter(w=>w.lvl==='bad').length, nw=list.filter(w=>w.lvl==='warn').length;
@@ -859,8 +946,12 @@ $('schedBody').addEventListener('click',e=>{const r=e.target.closest('[data-row]
 /* ============ Settings binding ============ */
 for(let u=1;u<=8;u++) $('sU').insertAdjacentHTML('beforeend',`<option value="${u}">${u}U (${(u*44.45-0.8).toFixed(2)})</option>`);
 const bind=[['sName','name'],['sJob','job'],['sClient','client'],['sRack','rack'],['sU','U',Number],['sThick','thick'],['sFinish','finish'],['sFix','fix'],['sDfix','dfix'],['sQty','qty',Number],['sBy','by']];
-function syncSettings(){const p=P();for(const [id,k] of bind) $(id).value=p[k]??'';
+function syncSettings(){const p=P();if(!p.shelf)p.shelf=defShelf();for(const [id,k] of bind) $(id).value=p[k]??'';$('sShelf').value=p.shelf.on?'1':'0';$('sDepth').value=p.shelf.depth;$('sDepth').disabled=!p.shelf.on;
   $('panelSel').innerHTML=panels.map((x,i)=>`<option value="${i}"${i===cur?' selected':''}>${esc(x.name||'Untitled')}</option>`).join('');}
+$('sShelf').addEventListener('change',e=>{const p=P();pushUndo();p.shelf.on=e.target.value==='1';
+  if(p.shelf.on){let need=0;for(const it of p.items)if(it.kind==='device')need=Math.max(need,+p.thick+it.h+2);while(panelH(p)<need&&p.U<8)p.U++;applySit(p);}
+  persist();renderAll();});
+$('sDepth').addEventListener('change',e=>{const p=P();pushUndo();p.shelf.depth=Math.max(50,Math.min(900,+e.target.value||250));persist();renderAll();});
 for(const [id,k,cast] of bind){$(id).addEventListener('change',e=>{pushUndo();P()[k]=cast?cast(e.target.value):e.target.value;persist();renderAll();if(k==='name')syncSettings();});}
 $('panelSel').addEventListener('change',e=>{cur=+e.target.value;sel.clear();undo=[];redo=[];persist();renderAll();});
 $('bNew').onclick=()=>{panels.push(blankPanel('Panel '+(panels.length+1)));cur=panels.length-1;sel.clear();undo=[];redo=[];persist();renderAll();toast('New 1U panel added');};
@@ -892,7 +983,7 @@ svg.addEventListener('pointermove',e=>{
   const p=P(),W=rackW(p),H=panelH(p),prim=drag.orig.find(o=>o.i.id===drag.primary);
   let nx=snap(prim.x+dx), ny=snap(prim.y+dy); guide=null;
   // magnetic: align to other items' Y, to the panel centre line and centre height
-  const others=p.items.filter(i=>!sel.has(i.id)&&i.kind==='part');
+  const others=p.items.filter(i=>!sel.has(i.id)&&isPL(i));
   for(const o of others) if(Math.abs(o.y-ny)<1.2){ny=o.y;guide=`M0 ${f2(H-ny)}H${W}`;break;}
   if(Math.abs(nx-W/2)<1.2){nx=+(W/2).toFixed(2);guide=(guide||'')+`M${f2(nx)} 0V${H}`;}
   if(Math.abs(ny-H/2)<0.8&&!guide){ny=+(H/2).toFixed(2);guide=`M0 ${f2(H-ny)}H${W}`;}
@@ -994,7 +1085,7 @@ const today=()=>new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'shor
 function allGeometry(p){
   const out={outline:panelOutline(p),mount:mountContours(p),cuts:[],holes:[],texts:[],boxes:[],flanges:[],centres:[],logos:[]};
   for(const it of p.items){
-    if(it.kind==='part'){const g=geomOf(it,p);if(!g)continue;out.cuts.push(...g.cuts);out.holes.push(...g.holes);out.flanges.push({b:g.bbox,round:g.def.flange.round});out.centres.push({x:it.x,y:it.y});
+    if(isPL(it)){const g=geomOf(it,p);if(!g)continue;out.cuts.push(...g.cuts);out.holes.push(...g.holes);out.flanges.push({b:g.bbox,round:g.def.flange.round});out.centres.push({x:it.x,y:it.y});
       const lp=labelPos(it,g);if(lp)out.texts.push({x:lp.x,y:lp.y,s:lp.s,text:it.label.text,anchor:lp.anchor});}
     else if(it.kind==='text') out.texts.push({x:it.x,y:it.y,s:it.size,text:it.text,anchor:'middle'});
     else if(it.kind==='box') out.boxes.push(boxContour(it));
@@ -1038,6 +1129,28 @@ function makeDXF(p,withRef){
   e(0,'ENDSEC',0,'EOF');
   return L.join('\r\n')+'\r\n';
 }
+function makeShelfDXF(p){
+  const sg=shelfGeom(p), n=v=>(+v).toFixed(4), L=[], e=(...a)=>L.push(...a.map(String));
+  const ox=sg.x0-sg.side; // origin = front-left corner of the flat pattern
+  const X=x=>n(x-ox), Y=y=>n(y);
+  const layers=[['OUTLINE',7],['CUT',1],['BEND',3],['REFERENCE_NO_CUT',8]];
+  e(0,'SECTION',2,'HEADER',9,'$ACADVER',1,'AC1009',9,'$INSUNITS',70,4,0,'ENDSEC');
+  e(0,'SECTION',2,'TABLES',0,'TABLE',2,'LTYPE',70,2,0,'LTYPE',2,'CONTINUOUS',70,0,3,'Solid line',72,65,73,0,40,'0.0',0,'LTYPE',2,'DASHED',70,0,3,'Dashed',72,65,73,2,40,'6.0',49,'4.0',49,'-2.0',0,'ENDTAB');
+  e(0,'TABLE',2,'LAYER',70,layers.length);for(const [nm,c] of layers)e(0,'LAYER',2,nm,70,0,62,c,6,nm==='BEND'?'DASHED':'CONTINUOUS');e(0,'ENDTAB');
+  e(0,'TABLE',2,'STYLE',70,1,0,'STYLE',2,'STANDARD',70,0,40,'0.0',41,'1.0',50,'0.0',71,0,42,'2.5',3,'txt',4,'',0,'ENDTAB',0,'ENDSEC');
+  e(0,'SECTION',2,'ENTITIES');
+  const line=(x1,y1,x2,y2,ly)=>e(0,'LINE',8,ly,10,X(x1),20,Y(y1),30,0,11,X(x2),21,Y(y2),31,0);
+  const o=sg.outline;for(let i=0;i<o.length;i++){const a=o[i],b=o[(i+1)%o.length];line(a[0],a[1],b[0],b[1],'OUTLINE');}
+  for(const b of sg.bends) line(b[0],b[1],b[2],b[3],'BEND');
+  const slot=(sl,ly)=>{const k=xfContour(contourLocal({t:'rect',w:sl.w,h:sl.h,r:Math.min(sl.w,sl.h)/2}),{x:sl.x,y:sl.y,rot:0});
+    for(const sgm of k.segs){if(sgm.t==='L')line(sgm.x1,sgm.y1,sgm.x2,sgm.y2,ly);else e(0,'ARC',8,ly,10,X(sgm.cx),20,Y(sgm.cy),30,0,40,n(sgm.r),50,n(((sgm.a1%360)+360)%360),51,n(((sgm.a2%360)+360)%360));}};
+  sg.slots.forEach(sl=>slot(sl,'CUT')); sg.vents.forEach(sl=>slot(sl,'CUT'));
+  const ref=refMap(p);
+  for(const d of sg.devs){line(d.x1,d.y1,d.x2,d.y1,'REFERENCE_NO_CUT');line(d.x2,d.y1,d.x2,d.y2,'REFERENCE_NO_CUT');line(d.x2,d.y2,d.x1,d.y2,'REFERENCE_NO_CUT');line(d.x1,d.y2,d.x1,d.y1,'REFERENCE_NO_CUT');
+    const cx=(d.x1+d.x2)/2,cy=(d.y1+d.y2)/2; e(0,'TEXT',8,'REFERENCE_NO_CUT',10,X(cx),20,Y(cy),30,0,40,n(3),1,`${ref.get(d.it.id)} ${d.it.name||'Device'}`.replace(/[\r\n]/g,' '),7,'STANDARD',72,1,11,X(cx),21,Y(cy),31,0,73,2);}
+  e(0,'ENDSEC',0,'EOF');
+  return L.join('\r\n')+'\r\n';
+}
 function makeSVG(p){
   const G=allGeometry(p),W=rackW(p),H=panelH(p);
   const at='fill="none" stroke-width="0.1"';
@@ -1055,7 +1168,7 @@ function scheduleRows(p){
   const ref=refMap(p),rows=[];
   const sorted=p.items.slice().sort((a,b)=>ref.get(a.id).localeCompare(ref.get(b.id)));
   for(const it of sorted){
-    if(it.kind==='part'){const d=defOf(it);let desc=d.desc;
+    if(isPL(it)){const d=defOf(it);let desc=d.desc;
       if(d.holes==='D'){const m=it.dfix||p.dfix;desc='Ø24.0 + '+(m==='four'?'4×Ø3.2 at ±9.5, ±12 (all D-size positions)':m==='tlbr'?'2×Ø3.2 top-left / bottom-right, 19×24':'2×Ø3.2 top-right / bottom-left, 19×24');}
       rows.push({ref:ref.get(it.id),name:d.name,pn:d.pn,x:it.x,y:it.y,rot:it.rot||0,cut:desc,eng:it.label?.pos!=='none'?(it.label?.text||''):'',conf:d.conf});}
     else if(it.kind==='text') rows.push({ref:ref.get(it.id),name:'Engraved text',pn:'',x:it.x,y:it.y,rot:0,cut:`Text height ${it.size} mm`,eng:it.text,conf:''});
@@ -1072,8 +1185,9 @@ function makePDF(p){
   const [sc,scTxt]=scales.find(([s])=>W*s<=330&&H*s<=150)||scales[scales.length-1];
   const ox=(PW-W*sc)/2-12, oy=50+(150-H*sc)/2;
   const X=x=>ox+x*sc, Y=y=>oy+(H-y)*sc;
+  const shelfOn=!!p.shelf?.on&&p.items.some(i=>i.kind==='device'), NS=shelfOn?3:2;
   const frame=(pg)=>{doc.setDrawColor(20);doc.setLineWidth(0.5);doc.rect(10,10,PW-20,PH-20);
-    doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(20);doc.text('KUDOS AV',16,18);doc.setFont('helvetica','normal');doc.text(`${p.name}  ·  Sheet ${pg} of 2`,PW-16,18,{align:'right'});doc.setLineWidth(0.2);doc.line(10,22,PW-10,22);};
+    doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(20);doc.text('KUDOS AV',16,18);doc.setFont('helvetica','normal');doc.text(`${p.name}  ·  Sheet ${pg} of ${NS}`,PW-16,18,{align:'right'});doc.setLineWidth(0.2);doc.line(10,22,PW-10,22);};
   frame(1);
   const poly=(k)=>{
     if(k.circle){doc.circle(X(k.cx),Y(k.cy),k.r*sc,'S');return;}
@@ -1097,7 +1211,7 @@ function makePDF(p){
   doc.setDrawColor(200,40,40);doc.setLineWidth(0.1);
   for(const it of p.items){const cx=X(it.x),cy=Y(it.y);doc.line(cx-1.5,cy,cx+1.5,cy);doc.line(cx,cy-1.5,cx,cy+1.5);}
   doc.setTextColor(200,40,40);
-  for(const it of p.items.filter(i=>i.kind==='part')){const g=geomOf(it,p);if(!g)continue;
+  for(const it of p.items.filter(i=>isPL(i))){const g=geomOf(it,p);if(!g)continue;
     doc.setFont('helvetica','bold');doc.setFontSize(6.5);doc.text(ref.get(it.id),X(g.bbox.x2),Y(g.bbox.y2)-0.8,{align:'right'});
     // connector type, centred under the centre mark
     const wmm=Math.max(g.fw,24)*sc; doc.setFont('helvetica','bold');doc.setFontSize(6.5);
@@ -1134,7 +1248,7 @@ function makePDF(p){
   doc.setFontSize(7.5);doc.text('VIEWED FROM FRONT · ALL DIMENSIONS IN mm TO HOLE CENTRES FROM BOTTOM-LEFT CORNER',X(0),top-24);
   // notes
   const {list}=checks(p);
-  const lows=[...new Set(p.items.filter(i=>i.kind==='part'&&defOf(i)?.conf==='low').map(i=>`${defOf(i).name} (${defOf(i).pn})`))];
+  const lows=[...new Set(p.items.filter(i=>isPL(i)&&defOf(i)?.conf==='low').map(i=>`${defOf(i).name} (${defOf(i).pn})`))];
   let notes=[`1. Material: ${p.thick} mm aluminium. Finish: ${({black:'black anodised',natural:'natural / clear anodised',white:'white powder coat'})[p.finish]}.`,
     `2. Engraving: text and outlines on layer ENGRAVE, infill ${p.finish==='black'?'white':'black'}. Set text in the maker's engraving font (DIN 1451 or similar) at the heights given.`,
     `3. Tolerance ±0.1 on holes and positions unless stated. Deburr all edges.`,
@@ -1150,7 +1264,7 @@ function makePDF(p){
   const tx=228,ty=232;
   tb(tx,ty,182,15,'Panel',p.name,true);
   tb(tx,ty+15,91,10,'Job',p.job);tb(tx+91,ty+15,91,10,'Client',p.client);
-  tb(tx,ty+25,46,10,'Size',`${p.rack}" ${p.U}U · ${f2(W)}×${f2(H)}`);tb(tx+46,ty+25,30,10,'Material',`${p.thick} mm Al`);tb(tx+76,ty+25,40,10,'Finish',({black:'Black anodised',natural:'Natural anod.',white:'White powder'})[p.finish]);tb(tx+116,ty+25,22,10,'Qty',p.qty);tb(tx+138,ty+25,22,10,'Scale (A3)',scTxt);tb(tx+160,ty+25,22,10,'Sheet','1 / 2');
+  tb(tx,ty+25,46,10,'Size',`${p.rack}" ${p.U}U · ${f2(W)}×${f2(H)}`);tb(tx+46,ty+25,30,10,'Material',`${p.thick} mm Al`);tb(tx+76,ty+25,40,10,'Finish',({black:'Black anodised',natural:'Natural anod.',white:'White powder'})[p.finish]);tb(tx+116,ty+25,22,10,'Qty',p.qty);tb(tx+138,ty+25,22,10,'Scale (A3)',scTxt);tb(tx+160,ty+25,22,10,'Sheet','1 / '+NS);
   tb(tx,ty+35,91,10,'Drawn',`${p.by||''} · Kudos AV`);tb(tx+91,ty+35,91,10,'Date',today());
   // ===== Page 2 — schedule
   doc.addPage('a3','landscape');frame(2);
@@ -1171,6 +1285,49 @@ function makePDF(p){
     wrapped.forEach((w,i)=>{const num=[3,4,5].includes(i);if(i===8&&r.conf==='low')doc.setTextColor(200,40,40);else doc.setTextColor(20);doc.text(w,num?x+cols[i][1]-2:x+1.5,y,{align:num?'right':'left'});x+=cols[i][1];});
     doc.setDrawColor(215);doc.setLineWidth(0.1);doc.line(x0,y+h-3.2,x0+cols.reduce((a,c)=>a+c[1],0),y+h-3.2);
     y+=h;
+  }
+  // ===== Page 3 — device shelf
+  if(shelfOn){
+    doc.addPage('a3','landscape');frame(3);
+    const sg=shelfGeom(p), ox=sg.x0-sg.side, FW=sg.SW+2*sg.side, FD=sg.D+sg.lip;
+    doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20);doc.text('DEVICE SHELF — PLAN VIEW (FOLDED SIZES)',16,32);
+    doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(90);
+    doc.text('Looking down on the tray. Front edge (bottom of this view) joins the back of the faceplate. Dimensions in mm to outside of folds.',16,37);
+    const ss=[[1,'1:1'],[1/1.5,'1:1.5'],[0.5,'1:2'],[0.4,'1:2.5'],[1/3,'1:3']].find(([k])=>FW*k<=300&&FD*k<=175)||[0.25,'1:4'];
+    const k=ss[0], px0=40, py0=48+175; // paper origin = front-left of flat pattern, y grows up the page as depth increases
+    const PX=x=>px0+(x-ox)*k, PY=y=>py0-y*k;
+    // flat outline + bends
+    doc.setDrawColor(0);doc.setLineWidth(0.3);const o=sg.outline;for(let i=0;i<o.length;i++){const a=o[i],b=o[(i+1)%o.length];doc.line(PX(a[0]),PY(a[1]),PX(b[0]),PY(b[1]));}
+    doc.setDrawColor(40,140,60);doc.setLineWidth(0.2);doc.setLineDashPattern([2,1.2],0);for(const b of sg.bends)doc.line(PX(b[0]),PY(b[1]),PX(b[2]),PY(b[3]));doc.setLineDashPattern([],0);
+    // device footprints
+    const ref=refMap(p);doc.setDrawColor(30,80,200);doc.setTextColor(30,80,200);doc.setLineWidth(0.15);doc.setLineDashPattern([1,0.8],0);
+    for(const d of sg.devs){doc.rect(PX(d.x1),PY(Math.min(d.y2,sg.D+sg.lip)),(d.x2-d.x1)*k,(Math.min(d.y2,sg.D+sg.lip)-d.y1)*k);}
+    doc.setLineDashPattern([],0);doc.setFontSize(6.5);
+    for(const d of sg.devs){const cx=PX((d.x1+d.x2)/2),cy=PY((d.y1+Math.min(d.y2,sg.D))/2);doc.setFont('helvetica','bold');doc.text(`${ref.get(d.it.id)} ${d.it.name||'Device'}`,cx,cy-1,{align:'center'});doc.setFont('helvetica','normal');doc.text(`${f2(d.it.w)} × ${f2(d.it.d)} footprint`,cx,cy+2.2,{align:'center'});}
+    // slots and vents
+    doc.setDrawColor(0);doc.setLineWidth(0.18);
+    for(const sl of sg.slots.concat(sg.vents)) doc.roundedRect(PX(sl.x-sl.w/2),PY(sl.y+sl.h/2),sl.w*k,sl.h*k,sl.w*k/2,sl.w*k/2,'S');
+    // dims: overall width, tray width, depth, lip
+    doc.setDrawColor(60);doc.setTextColor(20);doc.setLineWidth(0.12);doc.setFontSize(7.5);
+    const hd=(x1,x2,y,t)=>{doc.line(x1,y,x2,y);doc.line(x1,y-1.2,x1,y+1.2);doc.line(x2,y-1.2,x2,y+1.2);doc.text(t,(x1+x2)/2,y-1.2,{align:'center'});};
+    const vd=(y1,y2,x,t)=>{doc.line(x,y1,x,y2);doc.line(x-1.2,y1,x+1.2,y1);doc.line(x-1.2,y2,x+1.2,y2);doc.text(t,x-1.5,(y1+y2)/2,{angle:90,align:'center'});};
+    hd(PX(sg.x0),PX(sg.x0+sg.SW),py0+8,`${f2(sg.SW)} tray (between folds)`);
+    hd(PX(ox),PX(ox+FW),py0+15,`${f2(FW)} over side flanges (developed)`);
+    vd(PY(0),PY(sg.D),PX(ox)-6,`${f2(sg.D)} depth`);vd(PY(sg.D),PY(sg.D+sg.lip),PX(ox)-6,`${f2(sg.lip)} lip`);
+    // slot schedule
+    const tx0=PX(ox+FW)+16; let ty=60; doc.setFont('helvetica','bold');doc.setFontSize(8);doc.text('SHELF DETAILS',tx0,ty);doc.setFont('helvetica','normal');ty+=5;
+    const lines=[`Tray ${f2(sg.SW)} wide × ${f2(sg.D)} deep, ${p.thick} mm aluminium, ${({black:'black anodised',natural:'natural anodised',white:'white powder coat'})[p.finish]}.`,
+      `Side flanges ${f2(sg.side)} mm up, rear lip ${f2(sg.lip)} mm up.`,
+      sg.slots.length?`${sg.slots.length}× strap slots 5 × 26 (R2.5), 6 mm outside each device footprint, centred on its depth.`:'No strap slots.',
+      sg.vents.length?`${sg.vents.length}× vent slots 4 wide at 10 mm pitch under devices.`:'No vent slots.',
+      'X positions match the faceplate drawing (sheet 1). Depth measured from the back of the faceplate.',
+      'Maker to develop the flat pattern for their tooling (bend allowance).',
+      'Faceplate and tray can be one folded part or fixed together — maker\'s choice.',
+      'The shelf hangs off the front rails. Add rear support if the devices are heavy.'];
+    doc.setFontSize(7.5);for(const ln of lines){const w=doc.splitTextToSize(ln,90);doc.text(w,tx0,ty);ty+=w.length*3.6+1.2;}
+    ty+=3;doc.setFont('helvetica','bold');doc.text('DEVICES',tx0,ty);doc.setFont('helvetica','normal');ty+=4.5;
+    for(const d of sg.devs){const it=d.it;const w=doc.splitTextToSize(`${ref.get(it.id)}  ${it.name||'Device'} — ${f2(it.w)} × ${f2(it.h)} × ${f2(it.d)}, centre X ${f2(it.x)}, ${it.win!==false?'front through window':'behind blank panel'}${d.y2>sg.D?' — OVERHANGS BACK':''}`,90);doc.text(w,tx0,ty);ty+=w.length*3.6+0.8;}
+    doc.setFontSize(7);doc.setTextColor(90);doc.text(`Scale ${ss[1]} on A3`,16,PH-16);
   }
   return doc.output('arraybuffer');
 }
@@ -1198,11 +1355,12 @@ $('bZip').onclick=async()=>{
   z.file(s+'-with-reference.dxf',makeDXF(p,true));
   z.file(s+'-drawing.pdf',makePDF(p));
   z.file(s+'.svg',makeSVG(p));
+  if(p.shelf?.on&&p.items.some(i=>i.kind==='device')) z.file(s+'-shelf.dxf',makeShelfDXF(p));
   const used=new Set(p.items.map(i=>i.part));
   z.file(s+'.rackpanel.json',JSON.stringify({app:'kudos-rack-panel',v:1,panel:p,customs:customs.filter(c=>used.has(c.id)),logos:logos.filter(l=>p.items.some(i=>i.logo===l.id))},null,1));
   const rows=scheduleRows(p);
   z.file('README.txt',[`${p.name} — ${p.job||''}`,`Kudos AV · ${p.by||''} · ${today()}`,'',`${p.rack}" rack panel, ${p.U}U (${f2(rackW(p))} x ${f2(panelH(p))} mm), ${p.thick} mm aluminium, ${p.finish}. Qty ${p.qty}.`,'',
-    'FILES',`  ${s}.dxf                 Cut + engrave (layers OUTLINE, CUT, ENGRAVE). Units mm, origin bottom-left, front view.`,`  ${s}-with-reference.dxf  As above plus REFERENCE_NO_CUT layer showing connector flanges. Do not cut that layer.`,`  ${s}-drawing.pdf         Dimensioned drawing and cutout schedule (A3).`,`  ${s}.svg                 Same geometry for laser software (red cut, blue engrave).`,`  ${s}.rackpanel.json      Project file for the Kudos Rack Panel Designer.`,'',
+    'FILES',`  ${s}.dxf                 Cut + engrave (layers OUTLINE, CUT, ENGRAVE). Units mm, origin bottom-left, front view.`,`  ${s}-with-reference.dxf  As above plus REFERENCE_NO_CUT layer showing connector flanges. Do not cut that layer.`,`  ${s}-drawing.pdf         Dimensioned drawing and cutout schedule (A3).`,`  ${s}.svg                 Same geometry for laser software (red cut, blue engrave).`,...(p.shelf?.on&&p.items.some(i=>i.kind==='device')?[`  ${s}-shelf.dxf           Device shelf plan: OUTLINE, CUT (strap/vent slots), BEND lines, device footprints on REFERENCE_NO_CUT. Folded sizes — maker develops the flat pattern.`]:[]),`  ${s}.rackpanel.json      Project file for the Kudos Rack Panel Designer.`,'',
     'CUTOUT SCHEDULE (X, Y centre from bottom-left, mm)',...rows.map(r=>`  ${r.ref.padEnd(4)} ${String(r.name).padEnd(34)} X ${f2(r.x).padStart(7)}  Y ${f2(r.y).padStart(6)}  ${r.cut}${r.eng?'  ["'+r.eng+'"]':''}${r.conf==='low'?'  ** VERIFY **':''}`),
     '',...(list.length?['CHECKS',...list.map(w=>'  - '+w.msg)]:['CHECKS','  No clashes.']),''].join('\r\n'));
   const blob=await z.generateAsync({type:'blob'});
@@ -1211,10 +1369,10 @@ $('bZip').onclick=async()=>{
 
 /* ============ Misc ============ */
 let toastT;function toast(m){let t=document.querySelector('.toast');if(!t){t=document.createElement('div');t.className='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200);}
-function renderAll(){syncSettings();renderCanvas();renderSchedule();renderInspector();$('bUndo').disabled=!undo.length;$('bRedo').disabled=!redo.length;}
+function renderAll(){if(!P().shelf)P().shelf=defShelf();applySit(P());syncSettings();renderCanvas();renderSchedule();renderInspector();$('bUndo').disabled=!undo.length;$('bRedo').disabled=!redo.length;}
 load(); bindDel();
 if(!(window.claude&&typeof window.claude.use==='function')) $('bDxf').hidden=false;
 renderLib(); renderAll();
-window.__rack={makeDXF,makeSVG,makePDF,P:()=>P(),checks,LIB,addPart,panels:()=>panels};
+window.__rack={makeShelfDXF,makeDXF,makeSVG,makePDF,P:()=>P(),checks,LIB,addPart,panels:()=>panels};
 })();
 </script>
