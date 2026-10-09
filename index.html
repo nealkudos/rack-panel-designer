@@ -195,6 +195,7 @@ a{color:var(--accent)}
         <button class="btn sm on" id="vCut" title="Show holes as cut">Cutouts</button>
         <button class="btn sm" id="vFit" title="Show connectors fitted">Fitted</button>
         <button class="btn sm on" id="vNames" title="Show each connector's reference and type on the drawing (not engraved)" aria-pressed="true">Part names</button>
+        <select id="nmSize" aria-label="Part name size" title="Size of the part names on screen" style="font-size:13px;padding:3px 6px"><option value="0.8">Names S</option><option value="1">Names M</option><option value="1.3">Names L</option><option value="1.6">Names XL</option></select>
         <button class="btn sm" id="vMeas" title="Show spacing measurements between connectors (on screen and on the PDF)" aria-pressed="false">Measurements</button>
         <select id="spMode" aria-label="What to measure" style="font-size:13px;padding:3px 6px" hidden><option value="pitch">Centre to centre</option><option value="gap">Gap between</option></select>
         <span class="sep"></span>
@@ -348,7 +349,7 @@ let customs=[]; // custom defs
 let logos=[];   // uploaded logos: {id,name,ar,polys:[[u,v,u,v…]]} normalised to width 1, y up
 let panels=[], cur=0;
 let sel=new Set(), view='cut', zoom=1, libCur=null;
-let showNames=true; try{showNames=localStorage.getItem(LS+'-names')!=='0';}catch(e){}
+let showNames=true, nmScale=1; try{nmScale=+(localStorage.getItem(LS+'-nms')||1);showNames=localStorage.getItem(LS+'-names')!=='0';}catch(e){}
 let spMode='pitch', showMeas=false; try{spMode=localStorage.getItem(LS+'-sp')||'pitch';if(spMode==='off')spMode='pitch';showMeas=localStorage.getItem(LS+'-meas')==='1';}catch(e){}
 let undo=[], redo=[];
 const uid=()=>Math.random().toString(36).slice(2,9);
@@ -590,6 +591,12 @@ function shelfGeom(p){
   return {SW,x0,D,lip,side,outline,bends,devs,slots:clear,vents};
 }
 
+function applyLabelSize(items,size,incText){
+  if(!(size>=1&&size<=30)){toast('Enter a text height between 1 and 30 mm');return;}
+  pushUndo(); let n=0;
+  for(const i of items){ if(isPL(i)){i.label=i.label||{text:'',pos:i.kind==='device'?'none':'below',size:3};i.label.size=size;n++;} else if(incText&&i.kind==='text'){i.size=size;n++;} }
+  persist(); renderAll(); toast(`Text height set to ${size} mm on ${n} item${n===1?'':'s'}`);
+}
 /* ============ Spacing ============ */
 // Rows = connectors/devices whose centres share a Y (±1 mm). Spans are between neighbours, left to right.
 function rowsOf(p){
@@ -730,7 +737,7 @@ function renderCanvas(){
       // aim for ~13px on screen at any zoom, but never wider or taller than the connector itself
       let nm=shortName(g.def);
       const fitW=Math.max(g.fw,10)*0.92/(Math.max(nm.length,3)*0.5), fitH=g.fh*0.8/2.3;
-      const fs=Math.min(13/pxPerMm,fitW,fitH);
+      const fs=Math.min(13*nmScale/pxPerMm,fitW*Math.max(1,nmScale*0.9),fitH*Math.max(1,nmScale*0.9));
       const cy=H-it.y;
       s+=`<g pointer-events="none" font-family="Barlow Condensed, Arial Narrow, sans-serif" text-anchor="middle" fill="var(--accent)" stroke="var(--canvas)" stroke-width="${(fs*0.28).toFixed(2)}" paint-order="stroke" stroke-linejoin="round">
         <text x="${f2(it.x)}" y="${f2(cy-fs*0.55)}" font-size="${fs}" font-weight="700" dominant-baseline="central">${esc(ref.get(it.id))}</text>
@@ -838,10 +845,15 @@ function renderInspector(){
           <div class="row"><button class="btn sm" data-rowact="eq" data-row="${ix}">Make centres equal</button><button class="btn sm" data-rowact="geq" data-row="${ix}">Make gaps equal</button></div>
           <div class="row"><input type="number" step="0.5" id="rp${ix}" placeholder="pitch mm" style="width:90px" aria-label="Pitch for row at Y ${f2(r.y)}"><button class="btn sm" data-rowact="pitch" data-row="${ix}">Set pitch</button></div></div>`).join('')}</div>
           <p class="note" style="margin:6px 0 0">Equal spacing keeps the outer two items where they are. Set pitch centres the row on its current middle.</p></div>`;})()}
+      ${p.items.some(i=>isPL(i)||i.kind==='text')?`<div><h3 style="font-size:15px;margin-bottom:6px">Engraved text size</h3>
+        <div class="two">${numField('allLs','Text height mm',(()=>{const v=[...new Set(p.items.filter(i=>isPL(i)&&i.label?.text).map(i=>i.label.size||3))];return v.length===1?v[0]:'';})(),0.5)}
+        <label class="field"><span>Apply to</span><select id="allLsWho"><option value="labels">All connector labels</option><option value="all">Labels and free text</option></select></label></div>
+        <button class="btn sm" id="allLsGo">Apply to all</button></div>`:''}
       <div><h3 style="font-size:15px;margin-bottom:6px">Checks</h3>${warnHtml(list)}</div>
       <label class="field"><span>Notes for the maker</span><textarea id="pNotes" placeholder="e.g. Engraving infill white. Deburr all holes.">${esc(p.notes||'')}</textarea></label>
       <p class="note" style="margin:0">Positions are measured to each part's centre from the panel's bottom-left corner, viewed from the front. The DXF uses the same origin.</p>`;
     $('pNotes').addEventListener('change',e=>{pushUndo();p.notes=e.target.value;persist();});
+    $('allLsGo')?.addEventListener('click',()=>applyLabelSize(p.items,+$('allLs').value,$('allLsWho').value==='all'));
     if(p.shelf?.on){const su=(k,fn)=>e=>{pushUndo();p.shelf[k]=fn(e.target.value);persist();renderAll();};
       $('shLip').addEventListener('change',su('lip',v=>Math.max(0,+v)));$('shSide').addEventListener('change',su('side',v=>Math.max(0,+v)));
       $('shStraps').addEventListener('change',su('straps',v=>v==='1'));$('shVents').addEventListener('change',su('vents',v=>v==='1'));}
@@ -850,6 +862,7 @@ function renderInspector(){
   if(items.length>1){
     $('inspTitle').textContent=items.length+' selected';
     el.innerHTML=`<div class="row"><button class="btn sm" data-act="alignY">Align to one row</button><button class="btn sm" data-act="dist">Even spacing</button><button class="btn sm" data-act="spread">Spread across panel</button><button class="btn sm" data-act="centreY">Centre vertically</button><button class="btn sm" data-act="centreX">Centre group</button></div>
+      <div class="two">${numField('mLs','Label text height mm',(()=>{const v=[...new Set(items.filter(i=>isPL(i)).map(i=>i.label?.size||3))];return v.length===1?v[0]:'';})(),0.5)}<div class="field"><span>&nbsp;</span><button class="btn sm" data-act="lsize">Apply size</button></div></div>
       <div class="two">${numField('mPitch','Set pitch mm','',0.5)}<div class="field"><span>&nbsp;</span><button class="btn sm" data-act="pitch">Apply pitch</button></div></div>
       <div class="row"><button class="btn sm" data-act="dupe">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>
       <p class="note" style="margin:0">Align uses the first part you selected. Even spacing keeps the outer two in place.</p>`;
@@ -971,6 +984,7 @@ $('insp').addEventListener('click',e=>{
   else if(a==='centreY'){const H=panelH(p);items.forEach(i=>i.y=+(H/2).toFixed(2));}
   else if(a==='centreX'){const xs=items.map(i=>i.x);const mid=(Math.min(...xs)+Math.max(...xs))/2,d=rackW(p)/2-mid;items.forEach(i=>i.x=+(i.x+d).toFixed(2));}
   else if(a==='dist'){const s=items.slice().sort((x,y)=>x.x-y.x),n=s.length;if(n>2){const st=(s[n-1].x-s[0].x)/(n-1);s.forEach((i,k)=>i.x=+(s[0].x+k*st).toFixed(2));}}
+  else if(a==='lsize'){undo.pop();applyLabelSize(items,+$('mLs').value,true);return;}
   else if(a==='pitch'){const pt=+$('mPitch').value;if(pt>0){const s=items.slice().sort((x,y)=>x.x-y.x);const mid=(s[0].x+s[s.length-1].x)/2,x0=mid-pt*(s.length-1)/2;s.forEach((i,k)=>i.x=+(x0+k*pt).toFixed(2));}}
   else if(a==='spread'){const s=items.slice().sort((x,y)=>x.x-y.x);const ws=s.map(i=>geomOf(i,p)?.fw||10);const op=opening(p),rl=(rackW(p)-op)/2;const gap=(op-ws.reduce((a,b)=>a+b,0))/(s.length+1);let x=rl+gap;s.forEach((i,k)=>{i.x=+(x+ws[k]/2).toFixed(2);x+=ws[k]+gap;});}
   persist();renderAll();
@@ -1097,6 +1111,8 @@ $('spMode').addEventListener('change',e=>{spMode=e.target.value;try{localStorage
 const syncMeas=()=>{$('vMeas').classList.toggle('on',showMeas);$('vMeas').setAttribute('aria-pressed',String(showMeas));$('spMode').hidden=!showMeas;};
 $('vMeas').onclick=()=>{showMeas=!showMeas;try{localStorage.setItem(LS+'-meas',showMeas?'1':'0');}catch(_){}syncMeas();renderCanvas();};
 syncMeas();
+$('nmSize').value=String(nmScale);
+$('nmSize').addEventListener('change',e=>{nmScale=+e.target.value;try{localStorage.setItem(LS+'-nms',String(nmScale));}catch(_){}renderCanvas();});
 const syncNamesBtn=()=>{$('vNames').classList.toggle('on',showNames);$('vNames').setAttribute('aria-pressed',String(showNames));};
 $('vNames').onclick=()=>{showNames=!showNames;try{localStorage.setItem(LS+'-names',showNames?'1':'0');}catch(e){}syncNamesBtn();renderCanvas();};
 syncNamesBtn();
