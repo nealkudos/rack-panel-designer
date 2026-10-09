@@ -384,11 +384,17 @@ function load(){
   panels=[examplePanel()];cur=0;
 }
 let saveT;
-function persist(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(LS,JSON.stringify({panels,cur,customs,logos}))}catch(e){}},300);}
+function persist(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(LS,JSON.stringify({panels,cur,customs,logos}))}catch(e){}saveHist();},300);}
+// Undo history is kept per panel and survives a page reload or closing the tab.
+let histStore={}; try{histStore=JSON.parse(localStorage.getItem(LS+'-hist')||'{}')||{};}catch(e){histStore={};}
+function saveHist(){const id=P()?.id;if(!id)return;histStore[id]={undo:undo.slice(-40),redo:redo.slice(-40)};
+  const ids=new Set(panels.map(p=>p.id));for(const k of Object.keys(histStore))if(!ids.has(k))delete histStore[k];
+  try{localStorage.setItem(LS+'-hist',JSON.stringify(histStore));}catch(e){try{histStore[id]={undo:undo.slice(-10),redo:[]};localStorage.setItem(LS+'-hist',JSON.stringify(histStore));}catch(_){}}}
+function loadHist(){const h=histStore[P()?.id]||{};undo=Array.isArray(h.undo)?h.undo.slice():[];redo=Array.isArray(h.redo)?h.redo.slice():[];}
 function snapshot(){return JSON.stringify(P());}
 function pushUndo(){undo.push(snapshot()); if(undo.length>80)undo.shift(); redo=[];}
-function doUndo(){if(!undo.length)return; redo.push(snapshot()); panels[cur]=JSON.parse(undo.pop()); pruneSel(); renderAll();}
-function doRedo(){if(!redo.length)return; undo.push(snapshot()); panels[cur]=JSON.parse(redo.pop()); pruneSel(); renderAll();}
+function doUndo(){if(!undo.length)return; redo.push(snapshot()); panels[cur]=JSON.parse(undo.pop()); pruneSel(); persist(); renderAll();}
+function doRedo(){if(!redo.length)return; undo.push(snapshot()); panels[cur]=JSON.parse(redo.pop()); pruneSel(); persist(); renderAll();}
 function pruneSel(){const ids=new Set(P().items.map(i=>i.id)); for(const s of [...sel]) if(!ids.has(s)) sel.delete(s);}
 
 /* ============ Geometry ============ */
@@ -1021,11 +1027,11 @@ $('sShelf').addEventListener('change',e=>{const p=P();pushUndo();p.shelf.on=e.ta
 $('sText').addEventListener('change',e=>{const v=+e.target.value;if(!e.target.value)return;applyLabelSize(P().items,v,true);});
 $('sDepth').addEventListener('change',e=>{const p=P();pushUndo();p.shelf.depth=Math.max(50,Math.min(900,+e.target.value||250));persist();renderAll();});
 for(const [id,k,cast] of bind){$(id).addEventListener('change',e=>{pushUndo();P()[k]=cast?cast(e.target.value):e.target.value;persist();renderAll();if(k==='name')syncSettings();});}
-$('panelSel').addEventListener('change',e=>{cur=+e.target.value;sel.clear();undo=[];redo=[];persist();renderAll();});
-$('bNew').onclick=()=>{panels.push(blankPanel('Panel '+(panels.length+1)));cur=panels.length-1;sel.clear();undo=[];redo=[];persist();renderAll();toast('New 1U panel added');};
+$('panelSel').addEventListener('change',e=>{cur=+e.target.value;sel.clear();loadHist();persist();renderAll();});
+$('bNew').onclick=()=>{panels.push(blankPanel('Panel '+(panels.length+1)));cur=panels.length-1;sel.clear();loadHist();persist();renderAll();toast('New 1U panel added');};
 $('bDup').onclick=()=>{const c=JSON.parse(JSON.stringify(P()));c.id=uid();c.name+=' copy';panels.push(c);cur=panels.length-1;sel.clear();persist();renderAll();};
 function resetDel(){$('delWrap').innerHTML='<button class="btn danger" id="bDel">Delete</button>';bindDel();}
-function bindDel(){$('bDel').onclick=()=>{const w=$('delWrap');w.innerHTML=`<span class="confirm">Delete “${esc(P().name)}”? <button class="btn sm danger" id="dY">Delete</button><button class="btn sm" id="dN">Keep</button></span>`;$('dN').onclick=resetDel;$('dY').onclick=()=>{panels.splice(cur,1);if(!panels.length)panels.push(blankPanel());cur=Math.max(0,cur-1);sel.clear();undo=[];redo=[];persist();resetDel();renderAll();};};}
+function bindDel(){$('bDel').onclick=()=>{const w=$('delWrap');w.innerHTML=`<span class="confirm">Delete “${esc(P().name)}”? <button class="btn sm danger" id="dY">Delete</button><button class="btn sm" id="dN">Keep</button></span>`;$('dN').onclick=resetDel;$('dY').onclick=()=>{panels.splice(cur,1);if(!panels.length)panels.push(blankPanel());cur=Math.max(0,cur-1);sel.clear();loadHist();persist();resetDel();renderAll();};};}
 
 /* ============ Canvas interaction ============ */
 function svgPt(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const r=pt.matrixTransform(svg.getScreenCTM().inverse());return {x:r.x,y:panelH(P())-r.y};}
@@ -1429,7 +1435,7 @@ $('bSvg').onclick=()=>saveFile(slug()+'.svg',makeSVG(P()),'image/svg+xml');
 $('bDxf').onclick=()=>{guardClash();saveFile(slug()+'.dxf',makeDXF(P(),false),'application/dxf');};
 $('bSave').onclick=()=>{const p=P();const used=new Set(p.items.map(i=>i.part));saveFile(slug()+'.rackpanel.json',JSON.stringify({app:'kudos-rack-panel',v:1,panel:p,customs:customs.filter(c=>used.has(c.id)),logos:logos.filter(l=>p.items.some(i=>i.logo===l.id))},null,1),'application/json');};
 $('bOpen').onclick=()=>$('fileIn').click();
-$('fileIn').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.panel||!Array.isArray(j.panel.items))throw 0;for(const c of j.customs||[])if(!customs.some(x=>x.id===c.id))customs.push(c);for(const l of j.logos||[])if(!logos.some(x=>x.id===l.id))logos.push(l);j.panel.id=uid();panels.push(j.panel);cur=panels.length-1;sel.clear();undo=[];redo=[];persist();renderLib();renderAll();toast('Opened '+j.panel.name);}catch(err){toast('That file isn’t a rack panel project (.rackpanel.json).');}e.target.value='';};r.readAsText(f);});
+$('fileIn').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.panel||!Array.isArray(j.panel.items))throw 0;for(const c of j.customs||[])if(!customs.some(x=>x.id===c.id))customs.push(c);for(const l of j.logos||[])if(!logos.some(x=>x.id===l.id))logos.push(l);j.panel.id=uid();panels.push(j.panel);cur=panels.length-1;sel.clear();loadHist();persist();renderLib();renderAll();toast('Opened '+j.panel.name);}catch(err){toast('That file isn’t a rack panel project (.rackpanel.json).');}e.target.value='';};r.readAsText(f);});
 $('bZip').onclick=async()=>{
   if(!window.JSZip||!window.jspdf){toast('Export libraries didn’t load. Check your connection and reload.');return;}
   guardClash();
@@ -1453,7 +1459,7 @@ $('bZip').onclick=async()=>{
 /* ============ Misc ============ */
 let toastT;function toast(m){let t=document.querySelector('.toast');if(!t){t=document.createElement('div');t.className='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200);}
 function renderAll(){if(!P().shelf)P().shelf=defShelf();applySit(P());syncSettings();renderCanvas();renderSchedule();renderInspector();$('bUndo').disabled=!undo.length;$('bRedo').disabled=!redo.length;}
-load(); bindDel();
+load(); loadHist(); bindDel();
 if(!(window.claude&&typeof window.claude.use==='function')) $('bDxf').hidden=false;
 renderLib(); renderAll();
 window.__rack={makeShelfDXF,makeDXF,makeSVG,makePDF,P:()=>P(),checks,LIB,addPart,panels:()=>panels};
