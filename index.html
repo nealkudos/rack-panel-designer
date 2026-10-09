@@ -257,6 +257,10 @@ D('Data & video','no12','opticalCON MTP 12','NO12FDW-A');
 D('Data & video','nbb75dfg','BNC 75Ω (3G/12G SDI)','NBB-75DFG');
 D('Data & video','nbb75dfi','BNC 75Ω isolated','NBB-75DFI');
 D('Data & video','nausb','USB A/B feedthrough','NAUSB-W');
+D('Data & video','nausbc','USB-C 5G with fly-lead (D-size)','NAUSBC-5G-FL10/15/20/25',{kw:'usb c usb-c type-c typec 3.2',note:'Neutrik USB 3.2 Gen 1 (5 Gbps), 100 W PD. Rear side is a fly-lead (10–25 cm), not a socket — choose the length when ordering.',src:'https://www.neutrik.com/de/product/nausbc-5g'});
+D('Data & video','usbcgen','USB-C feedthrough, socket both sides (D-size)','D-size USB-C coupler',{conf:'med',kw:'usb c usb-c type-c typec feedthrough coupler',note:'Neutrik only lists a fly-lead USB-C part. For socket-to-socket, use a third-party USB-C coupler in a D-size housing and check its speed and power rating.'});
+add('Data & video','usbckey','USB-C keystone coupler','Keystone 14.9×19.4',{cut:[rect(14.9,19.4)],holes:[],flange:{w:17,h:22,r:1},desc:'14.9 × 19.4 rectangle, snap-in keystone',conf:'med',kw:'usb c usb-c type-c keystone',note:'Snap-in fit depends on panel thickness (most suit 1.5–2 mm).'});
+D('Data & video','nausb3','USB 3.0 A feedthrough','NAUSB3',{kw:'usb 3.0 usb-a'});
 D('Data & video','nahdmi','HDMI feedthrough','NAHDMI-W',{kw:'hdmi video'});
 D('Data & video','nahdmib','HDMI feedthrough, black','NAHDMI-W-B',{kw:'hdmi 2.0 video'});
 D('Data & video','dpgen','DisplayPort feedthrough (D-size)','D-size DisplayPort coupler',{conf:'med',kw:'dp displayport dp1.2 1.2 video',note:'Neutrik doesn\'t list a DisplayPort D-size insert. Use a third-party DisplayPort coupler in a D-size housing, rated DP 1.2 (HBR2, 4K60) or higher, and check it really is D-size before ordering. A passive coupler adds signal loss, so keep the cable runs either side short.'});
@@ -329,7 +333,7 @@ add('Fans & vents','vent6','Vent slots ×6','3 × 25 slots, 7 pitch',{cut:Array.
 
 // Short names for the drawing labels
 const SHORT={nc3fd:'XLR3 F',nc3md:'XLR3 M',nc4fd:'XLR4 F',nc4md:'XLR4 M',nj3fp6c:'JACK',ncj6fa:'COMBO',nc5fd:'XLR5 F',nc5md:'XLR5 M',socapex19:'SOCA 19',
-  ne8fdp:'etherCON',ne8fdx:'CAT6A',no2:'optCON DUO',no4:'optCON QUAD',no12:'MTP 12',nbb75dfg:'BNC',nbb75dfi:'BNC ISO',nausb:'USB',nahdmi:'HDMI',nahdmib:'HDMI',dpgen:'DP',dpkey:'DP',hdmikey:'HDMI',nadb15:'VGA',nadb9:'DB9',dgen:'D-SIZE',bnc38:'BNC',keystone:'KEYSTONE',
+  ne8fdp:'etherCON',ne8fdx:'CAT6A',no2:'optCON DUO',no4:'optCON QUAD',no12:'MTP 12',nbb75dfg:'BNC',nbb75dfi:'BNC ISO',nausb:'USB',nahdmi:'HDMI',nausbc:'USB-C',usbcgen:'USB-C',usbckey:'USB-C',nausb3:'USB 3.0',nahdmib:'HDMI',dpgen:'DP',dpkey:'DP',hdmikey:'HDMI',nadb15:'VGA',nadb9:'DB9',dgen:'D-SIZE',bnc38:'BNC',keystone:'KEYSTONE',
   nac3mpa:'PCON IN',nac3mpb:'PCON OUT',nac3mpx:'TRUE1 IN',nac3mpxtop:'TRUE1 TOP IN',nac3fpxtop:'TRUE1 TOP OUT',c14s:'IEC C14',c14snap:'IEC C14',c14fuse:'IEC + FUSE',c13s:'IEC C13',
   cee16_3:'16A CEE',cee32_3:'32A CEE',cee16_5:'16A 5P',cee32_5:'32A 5P',fuse520:'FUSE',nl4mp:'NL4',nl2mp:'NL2',nl8mpr:'NL8',nl4mpr:'NL4',han16b:'HAN 16B',han24b:'HAN 24B',
   plsrc:'PLOCK SRC',pldrn:'PLOCK DRN',ds9:'DB9 / VGA',ds15:'DA15',ds25:'DB25',ds37:'DC37',toggle:'TOGGLE',pb12:'PB 12',pb16:'PB 16',pb19:'PB 19',pb22:'PB 22',estop22:'E-STOP',
