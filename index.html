@@ -192,6 +192,7 @@ a{color:var(--accent)}
       <div class="toolbar">
         <button class="btn sm on" id="vCut" title="Show holes as cut">Cutouts</button>
         <button class="btn sm" id="vFit" title="Show connectors fitted">Fitted</button>
+        <button class="btn sm on" id="vNames" title="Show each connector's reference and type on the drawing (not engraved)" aria-pressed="true">Part names</button>
         <span class="sep"></span>
         <label class="row note">Grid <select id="grid" aria-label="Snap grid"><option value="0.1">0.1</option><option value="0.5">0.5</option><option value="1">1</option><option value="2.5">2.5</option><option value="5">5</option></select></label>
         <button class="btn sm" id="zOut" aria-label="Zoom out">−</button>
@@ -318,6 +319,7 @@ let customs=[]; // custom defs
 let logos=[];   // uploaded logos: {id,name,ar,polys:[[u,v,u,v…]]} normalised to width 1, y up
 let panels=[], cur=0;
 let sel=new Set(), view='cut', zoom=1, libCur=null;
+let showNames=true; try{showNames=localStorage.getItem(LS+'-names')!=='0';}catch(e){}
 let undo=[], redo=[];
 const uid=()=>Math.random().toString(36).slice(2,9);
 const P=()=>panels[cur];
@@ -587,6 +589,17 @@ function renderCanvas(){
       s+=`<rect data-hit="${it.id}" x="${f2(b.x1)}" y="${f2(H-b.y2)}" width="${f2(g.w)}" height="${f2(g.h)}" fill="transparent" style="cursor:move"><title>${esc(g.L.name)}</title></rect>`;
     }
   }
+  // part-name annotations (drawing notes only — never engraved or cut)
+  if(showNames){
+    for(const it of p.items){ if(it.kind!=='part') continue; const g=geomOf(it,p); if(!g) continue;
+      const fs=Math.max(1.4,Math.min(2.6,Math.min(g.fw,g.fh)*0.09)), maxC=Math.max(4,Math.floor(Math.max(g.fw,24)*0.95/(fs*0.5)));
+      let nm=shortName(g.def); if(nm.length>maxC) nm=nm.slice(0,maxC-1)+'…';
+      const cy=H-it.y;
+      s+=`<g pointer-events="none" font-family="Barlow Condensed, Arial Narrow, sans-serif" text-anchor="middle" fill="var(--accent)" stroke="var(--canvas)" stroke-width="${(fs*0.28).toFixed(2)}" paint-order="stroke" stroke-linejoin="round">
+        <text x="${f2(it.x)}" y="${f2(cy-fs*0.55)}" font-size="${fs}" font-weight="700" dominant-baseline="central">${esc(ref.get(it.id))}</text>
+        <text x="${f2(it.x)}" y="${f2(cy+fs*0.6)}" font-size="${(fs*0.85).toFixed(2)}" font-weight="600" dominant-baseline="central">${esc(nm)}</text></g>`;
+    }
+  }
   if(guide) s+=`<path d="${guide}" stroke="var(--accent)" stroke-width=".25"/>`;
   // dims hint
   s+=`<text x="${W/2}" y="${H+7}" font-size="3.2" text-anchor="middle" fill="var(--muted)" font-family="JetBrains Mono, monospace">${f2(W)} × ${f2(H)} mm · ${p.U}U · ${p.thick} mm</text>`;
@@ -626,6 +639,7 @@ function renderLib(){
   $('rPart').innerHTML=allDefs().map(d=>`<option value="${d.id}"${d.id===libCur?' selected':''}>${esc(d.name)} — ${esc(d.pn)}</option>`).join('');
 }
 const confText=c=>c==='high'?'Datasheet':c==='med'?'Check':'Verify';
+function shortName(d){return d.short||d.name.replace(/\s*\(.*?\)/g,'').split(',')[0].trim();}
 
 function addPart(id,x,y){
   const p=P(),def=allDefs().find(d=>d.id===id); if(!def) return;
@@ -860,6 +874,9 @@ $('logoIn').addEventListener('change',e=>{
 $('q').addEventListener('input',renderLib);
 $('vCut').onclick=()=>{view='cut';$('vCut').classList.add('on');$('vFit').classList.remove('on');renderCanvas();};
 $('vFit').onclick=()=>{view='fit';$('vFit').classList.add('on');$('vCut').classList.remove('on');renderCanvas();};
+const syncNamesBtn=()=>{$('vNames').classList.toggle('on',showNames);$('vNames').setAttribute('aria-pressed',String(showNames));};
+$('vNames').onclick=()=>{showNames=!showNames;try{localStorage.setItem(LS+'-names',showNames?'1':'0');}catch(e){}syncNamesBtn();renderCanvas();};
+syncNamesBtn();
 $('zIn').onclick=()=>{zoom=Math.min(6,zoom*1.4);renderCanvas();};
 $('zOut').onclick=()=>{zoom=Math.max(0.5,zoom/1.4);renderCanvas();};
 $('zFit').onclick=()=>{zoom=1;renderCanvas();};
@@ -939,6 +956,9 @@ function makeDXF(p,withRef){
   }
   for(const t of G.texts){const hj=t.anchor==='middle'?1:t.anchor==='end'?2:0;e(0,'TEXT',8,'ENGRAVE',10,n(t.x),20,n(t.y),30,0,40,n(t.s*0.72),1,t.text.replace(/[\r\n]/g,' '),7,'STANDARD',72,hj,11,n(t.x),21,n(t.y),31,0,73,2);}
   if(withRef){for(const f of G.flanges){const b=f.b;if(f.round)e(0,'CIRCLE',8,'REFERENCE_NO_CUT',10,n((b.x1+b.x2)/2),20,n((b.y1+b.y2)/2),30,0,40,n((b.x2-b.x1)/2));else[[b.x1,b.y1,b.x2,b.y1],[b.x2,b.y1,b.x2,b.y2],[b.x2,b.y2,b.x1,b.y2],[b.x1,b.y2,b.x1,b.y1]].forEach(([a,c,d,f2_])=>e(0,'LINE',8,'REFERENCE_NO_CUT',10,n(a),20,n(c),30,0,11,n(d),21,n(f2_),31,0));}}
+  if(withRef){const ref=refMap(p);for(const it of p.items){if(it.kind!=='part')continue;const d=defOf(it);if(!d)continue;
+    const t=`${ref.get(it.id)} ${shortName(d)}`.replace(/[\r\n]/g,' ');
+    e(0,'TEXT',8,'REFERENCE_NO_CUT',10,n(it.x),20,n(it.y),30,0,40,n(1.6),1,t,7,'STANDARD',72,1,11,n(it.x),21,n(it.y),31,0,73,2);}}
   e(0,'ENDSEC',0,'EOF');
   return L.join('\r\n')+'\r\n';
 }
@@ -1000,8 +1020,16 @@ function makePDF(p){
   // centre marks + refs
   doc.setDrawColor(200,40,40);doc.setLineWidth(0.1);
   for(const it of p.items){const cx=X(it.x),cy=Y(it.y);doc.line(cx-1.5,cy,cx+1.5,cy);doc.line(cx,cy-1.5,cx,cy+1.5);}
-  doc.setTextColor(200,40,40);doc.setFontSize(5);
-  for(const it of p.items.filter(i=>i.kind==='part')){const g=geomOf(it,p);if(g)doc.text(ref.get(it.id),X(g.bbox.x2)-0.4,Y(g.bbox.y2)+1.8,{align:'right'});}
+  doc.setTextColor(200,40,40);
+  for(const it of p.items.filter(i=>i.kind==='part')){const g=geomOf(it,p);if(!g)continue;
+    doc.setFont('helvetica','bold');doc.setFontSize(5);doc.text(ref.get(it.id),X(g.bbox.x2)-0.4,Y(g.bbox.y2)+1.8,{align:'right'});
+    // connector type, centred under the centre mark
+    const wmm=Math.max(g.fw,24)*sc; doc.setFont('helvetica','normal');doc.setFontSize(4.2);
+    let nm=shortName(g.def); while(nm.length>3&&doc.getTextWidth(nm)>wmm) nm=nm.slice(0,-2)+'…';
+    doc.text(nm,X(it.x),Y(it.y)+3.4,{align:'center'});
+    doc.setFontSize(3.6);let pn=g.def.pn;while(pn.length>3&&doc.getTextWidth(pn)>wmm) pn=pn.slice(0,-2)+'…';
+    doc.text(pn,X(it.x),Y(it.y)+5.2,{align:'center'});}
+  doc.setFont('helvetica','normal');
   // ordinate dims — X along the top
   doc.setTextColor(20);doc.setDrawColor(120);doc.setFontSize(6);doc.setLineWidth(0.08);
   const holes=mountHoles(p);
