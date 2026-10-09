@@ -1,0 +1,1116 @@
+<title>Rack Panel Designer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: CAD-style workbench. Library left, panel canvas centre, inspector right; stacks on narrow screens. */
+:root{
+  --bg:#e9edf1; --surface:#ffffff; --surface-2:#f4f6f8; --ink:#141b22; --muted:#5a6774; --line:#d2d9e0;
+  --accent:#1d5bd6; --accent-ink:#ffffff; --accent-soft:#dfe8fb;
+  --canvas:#dde3e9; --canvas-grid:#cfd6dd;
+  --ok:#1f7a4a; --warn:#b45309; --bad:#c2321f; --ok-soft:#e1f2e8; --warn-soft:#fbeedd; --bad-soft:#fbe3df;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1a2027; --surface-2:#202831; --ink:#e6ebf0; --muted:#94a2b0; --line:#2e3843;
+  --accent:#6d9cff; --accent-ink:#0b1220; --accent-soft:#1e2c47;
+  --canvas:#0d1115; --canvas-grid:#1b222a;
+  --ok:#4cc38a; --warn:#f0a35a; --bad:#ff7b6b; --ok-soft:#173326; --warn-soft:#3a2a17; --bad-soft:#3d1d19;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1a2027; --surface-2:#202831; --ink:#e6ebf0; --muted:#94a2b0; --line:#2e3843;
+  --accent:#6d9cff; --accent-ink:#0b1220; --accent-soft:#1e2c47;
+  --canvas:#0d1115; --canvas-grid:#1b222a;
+  --ok:#4cc38a; --warn:#f0a35a; --bad:#ff7b6b; --ok-soft:#173326; --warn-soft:#3a2a17; --bad-soft:#3d1d19;
+  color-scheme:dark}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:12px 32px}
+*{box-sizing:border-box}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
+.app{max-width:1680px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.brand{display:flex;flex-direction:column;line-height:1.05;margin-right:auto}
+.brand small{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.14em;font-size:11px;color:var(--muted);font-weight:600}
+.brand h1{font-size:26px;font-weight:700;letter-spacing:.01em}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:6px 11px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.libitem:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:3px 8px;font-size:13px}
+.btn[disabled]{opacity:.45;cursor:default}
+.btn.on{background:var(--accent-soft);border-color:var(--accent)}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field>span{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.09em;font-size:11px;font-weight:600;color:var(--muted)}
+input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:5px 8px;min-width:0}
+input[type=number]{font-family:var(--f-mono);font-size:13px}
+textarea{resize:vertical;min-height:60px}
+.settings{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.settings .wide{grid-column:span 2}
+.work{display:grid;grid-template-columns:270px minmax(0,1fr) 300px;gap:12px;align-items:start}
+.pane{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.pane-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line)}
+.pane-h h2{font-size:16px;font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+.lib{display:flex;flex-direction:column;max-height:calc(100vh - 40px);position:sticky;top:12px}
+.lib-search{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.lib-list{overflow:auto;padding:4px 0 10px}
+.cat{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.1em;font-size:11.5px;font-weight:700;color:var(--muted);padding:12px 12px 4px}
+.libitem{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:8px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:5px 12px;cursor:pointer}
+.libitem:hover,.libitem.cur{background:var(--surface-2)}
+.libitem.cur{box-shadow:inset 3px 0 0 var(--accent)}
+.libitem svg{width:34px;height:30px}
+.libitem .nm{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.libitem .pn{font-family:var(--f-mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.dot.high{background:var(--ok)} .dot.med{background:var(--warn)} .dot.low{background:var(--bad)}
+.chip{font-family:var(--f-display);font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:1px 7px;border-radius:99px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.chip.high{background:var(--ok-soft);color:var(--ok)} .chip.med{background:var(--warn-soft);color:var(--warn)} .chip.low{background:var(--bad-soft);color:var(--bad)}
+.lib-foot{border-top:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+details summary{cursor:pointer;font-family:var(--f-display);text-transform:uppercase;letter-spacing:.08em;font-weight:600;font-size:13px}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.formgrid .full{grid-column:1/-1}
+.canvas-pane{display:flex;flex-direction:column}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center}
+.sep{width:1px;height:22px;background:var(--line);margin:0 2px}
+.stage{background:var(--canvas);overflow:auto;padding:18px;min-height:140px;touch-action:none}
+.stage svg{display:block;margin:0 auto;user-select:none;-webkit-user-select:none}
+.status{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;padding:6px 12px;border-top:1px solid var(--line);font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.status b{color:var(--ink);font-weight:500}
+.sched{overflow-x:auto;border-top:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.08em;font-size:11.5px;color:var(--muted);text-align:left;font-weight:600;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+tr.sel td{background:var(--accent-soft)}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--surface-2)}
+.insp{display:flex;flex-direction:column;position:sticky;top:12px;max-height:calc(100vh - 40px);overflow:auto}
+.insp-body{padding:12px;display:flex;flex-direction:column;gap:12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--f-mono);font-size:12.5px;overflow-wrap:anywhere}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.note{font-size:12.5px;color:var(--muted)}
+.warnlist{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.warnlist li{font-size:13px;padding:6px 8px;border-radius:5px;background:var(--warn-soft);color:var(--ink);border-left:3px solid var(--warn)}
+.warnlist li.bad{background:var(--bad-soft);border-left-color:var(--bad)}
+.warnlist li.ok{background:var(--ok-soft);border-left-color:var(--ok)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:var(--r);font-size:13.5px;z-index:20;max-width:calc(100% - 32px)}
+.mono{font-family:var(--f-mono)}
+a{color:var(--accent)}
+.confirm{display:flex;gap:6px;align-items:center;font-size:13px}
+@media (max-width:1180px){.work{grid-template-columns:240px minmax(0,1fr)}.insp{grid-column:1/-1;position:static;max-height:none}}
+@media (max-width:760px){.work{grid-template-columns:minmax(0,1fr)}.lib{position:static;max-height:420px}.settings .wide{grid-column:span 1}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><small>Kudos AV · Fabrication</small><h1>Rack Panel Designer</h1></div>
+    <div class="row">
+      <label class="field" style="min-width:180px"><span>Panel</span><select id="panelSel"></select></label>
+      <button class="btn" id="bNew" title="Start a new blank panel">New</button>
+      <button class="btn" id="bDup" title="Duplicate this panel">Duplicate</button>
+      <span id="delWrap"><button class="btn danger" id="bDel">Delete</button></span>
+    </div>
+    <div class="row">
+      <button class="btn" id="bOpen">Open project</button>
+      <button class="btn" id="bSave">Save project</button>
+      <button class="btn" id="bSvg">SVG</button>
+      <button class="btn" id="bDxf" hidden>DXF</button>
+      <button class="btn" id="bPdf">PDF drawing</button>
+      <button class="btn primary" id="bZip">Fabrication pack</button>
+      <input type="file" id="fileIn" accept=".json,application/json" hidden>
+    </div>
+  </header>
+
+  <section class="settings" aria-label="Panel settings">
+    <label class="field wide"><span>Panel name</span><input id="sName"></label>
+    <label class="field wide"><span>Job</span><input id="sJob"></label>
+    <label class="field"><span>Client</span><input id="sClient"></label>
+    <label class="field"><span>Rack</span><select id="sRack"><option value="19">19" (482.6)</option><option value="10">10" (254.0)</option></select></label>
+    <label class="field"><span>Height</span><select id="sU"></select></label>
+    <label class="field"><span>Thickness</span><select id="sThick"><option>1.5</option><option>2</option><option>2.5</option><option>3</option><option>4</option><option>5</option></select></label>
+    <label class="field"><span>Finish</span><select id="sFinish"><option value="black">Black anodised</option><option value="natural">Natural / clear anodised</option><option value="white">White powder coat</option></select></label>
+    <label class="field"><span>Rack fixings</span><select id="sFix"><option value="slot">Slot 10 × 6.5</option><option value="round">Hole Ø6.5</option></select></label>
+    <label class="field"><span>D-size screws</span><select id="sDfix"><option value="four">All 4 positions</option><option value="tlbr">2: top-L / bottom-R</option><option value="trbl">2: top-R / bottom-L</option></select></label>
+    <label class="field"><span>Qty</span><input id="sQty" type="number" min="1" step="1"></label>
+    <label class="field"><span>Drawn by</span><input id="sBy"></label>
+  </section>
+
+  <div class="work">
+    <aside class="pane lib" aria-label="Connector library">
+      <div class="pane-h"><h2>Library</h2><span class="note" id="libCount"></span></div>
+      <div class="lib-search">
+        <input id="q" type="search" placeholder="Search: XLR, etherCON, NE8FDP, IEC…" aria-label="Search the library">
+        <div class="row note"><span class="chip high"><i class="dot high"></i>Datasheet</span><span class="chip med"><i class="dot med"></i>Check</span><span class="chip low"><i class="dot low"></i>Verify</span></div>
+      </div>
+      <div class="lib-list" id="libList"></div>
+      <div class="lib-foot">
+        <details id="rowForm">
+          <summary>Add a row</summary>
+          <div class="formgrid">
+            <label class="field full"><span>Part</span><select id="rPart"></select></label>
+            <label class="field"><span>Count</span><input id="rN" type="number" min="1" max="60" value="8"></label>
+            <label class="field"><span>Pitch mm</span><input id="rPitch" type="number" step="0.5" value="32"></label>
+            <label class="field"><span>Centre Y mm</span><input id="rY" type="number" step="0.5"></label>
+            <label class="field"><span>Centre X mm</span><input id="rX" type="number" step="0.5"></label>
+            <label class="field"><span>Label prefix</span><input id="rPre" placeholder="e.g. CH "></label>
+            <label class="field"><span>Start no.</span><input id="rStart" type="number" value="1"></label>
+            <button class="btn primary full" id="rGo">Add row</button>
+          </div>
+        </details>
+        <details id="custForm">
+          <summary>Custom part</summary>
+          <p class="note" style="margin:6px 0 0">For anything not listed. Take the sizes from the maker's cutout drawing.</p>
+          <div class="formgrid">
+            <label class="field full"><span>Name</span><input id="cName" placeholder="e.g. Lemo 1B panel"></label>
+            <label class="field"><span>Part no.</span><input id="cPn"></label>
+            <label class="field"><span>Shape</span><select id="cShape"><option value="circle">Round</option><option value="rect">Rectangle</option><option value="dflat">Round with flat</option></select></label>
+            <label class="field"><span>Ø / width</span><input id="cW" type="number" step="0.1" value="20"></label>
+            <label class="field"><span>Height / flat</span><input id="cH" type="number" step="0.1" value="0"></label>
+            <label class="field"><span>Corner R</span><input id="cR" type="number" step="0.1" value="0"></label>
+            <label class="field"><span>Screws</span><select id="cHoles"><option value="none">None</option><option value="h2">2 horizontal</option><option value="v2">2 vertical</option><option value="d2">2 diagonal</option><option value="q4">4 corners</option></select></label>
+            <label class="field"><span>Screw pitch X</span><input id="cPx" type="number" step="0.1" value="0"></label>
+            <label class="field"><span>Screw pitch Y</span><input id="cPy" type="number" step="0.1" value="0"></label>
+            <label class="field"><span>Screw hole Ø</span><input id="cHd" type="number" step="0.1" value="3.2"></label>
+            <label class="field"><span>Flange W</span><input id="cFw" type="number" step="0.1" value="26"></label>
+            <label class="field"><span>Flange H</span><input id="cFh" type="number" step="0.1" value="26"></label>
+            <button class="btn primary full" id="cGo">Save to library</button>
+          </div>
+        </details>
+      </div>
+    </aside>
+
+    <section class="pane canvas-pane" aria-label="Panel canvas">
+      <div class="toolbar">
+        <button class="btn sm on" id="vCut" title="Show holes as cut">Cutouts</button>
+        <button class="btn sm" id="vFit" title="Show connectors fitted">Fitted</button>
+        <span class="sep"></span>
+        <label class="row note">Grid <select id="grid" aria-label="Snap grid"><option value="0.1">0.1</option><option value="0.5">0.5</option><option value="1">1</option><option value="2.5">2.5</option><option value="5">5</option></select></label>
+        <button class="btn sm" id="zOut" aria-label="Zoom out">−</button>
+        <button class="btn sm" id="zFit">Fit</button>
+        <button class="btn sm" id="zIn" aria-label="Zoom in">+</button>
+        <span class="sep"></span>
+        <button class="btn sm" id="bUndo" title="Undo (Ctrl+Z)">Undo</button>
+        <button class="btn sm" id="bRedo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+        <span class="sep"></span>
+        <button class="btn sm" id="tText">+ Text</button>
+        <button class="btn sm" id="tBox">+ Box</button>
+        <button class="btn sm" id="tLogo" title="Upload an SVG logo to engrave">+ Logo</button>
+        <input type="file" id="logoIn" accept=".svg,image/svg+xml" hidden>
+      </div>
+      <div class="stage" id="stage"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div class="status"><span>X <b id="cx">—</b> · Y <b id="cy">—</b> <span>mm from bottom-left</span></span><span id="stWarn"></span><span>Drag to move · Shift-click to multi-select · Arrows nudge</span></div>
+      <div class="sched"><table><thead><tr><th>Ref</th><th>Part</th><th>Part no.</th><th style="text-align:right">X</th><th style="text-align:right">Y</th><th>Label</th><th>Status</th></tr></thead><tbody id="schedBody"></tbody></table></div>
+    </section>
+
+    <aside class="pane insp" aria-label="Inspector">
+      <div class="pane-h"><h2 id="inspTitle">Panel</h2></div>
+      <div class="insp-body" id="insp"></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(()=>{
+'use strict';
+/* ============ Connector library ============
+   Units mm, coordinates from connector centre, x right / y up, viewed from the FRONT.
+   conf: high = taken from maker's datasheet, med = trade standard / partly confirmed, low = verify with maker's drawing before cutting. */
+const DSIZE = {cut:[{t:'circle',d:24}], holes:'D', flange:{w:26,h:31,r:2}, desc:'Ø24.0 + 2×Ø3.2 (M3) on 19×24 diagonal — Neutrik D-size', conf:'high',
+  src:'https://media.iewc.com/SpecificationSheets/NL4MP-B.pdf'};
+const LIB = [];
+const add = (cat,id,name,pn,def)=>LIB.push(Object.assign({cat,id,name,pn},def));
+const D = (cat,id,name,pn,extra={})=>add(cat,id,name,pn,Object.assign({},DSIZE,extra));
+const circ = d=>({t:'circle',d});
+const rect = (w,h,r=0,dx=0,dy=0)=>({t:'rect',w,h,r,dx,dy});
+const q4 = (px,py,d)=>[[-px/2,py/2],[px/2,py/2],[px/2,-py/2],[-px/2,-py/2]].map(([x,y])=>({x,y,d}));
+const h2 = (p,d)=>[{x:-p/2,y:0,d},{x:p/2,y:0,d}];
+
+// Audio
+D('Audio','nc3fd','XLR 3-pin female','NC3FD-L-1');
+D('Audio','nc3md','XLR 3-pin male','NC3MD-L-1');
+D('Audio','nc4fd','XLR 4-pin female','NC4FD-L-1');
+D('Audio','nc4md','XLR 4-pin male','NC4MD-L-1');
+D('Audio','nj3fp6c','1/4" jack, stereo','NJ3FP6C');
+add('Audio','ncj6fa','XLR / jack combo','NCJ6FA-H',{cut:[circ(22)],holes:[{x:-9.9,y:9.9,d:3.2},{x:9.9,y:-9.9,d:3.2}],flange:{w:25,h:25,r:2},desc:'Ø22.0 + 2×Ø3.2 on 19.8×19.8 diagonal (A-series, rear mount)',conf:'med',note:'A-series cutout, not D-size. Diagonal direction not confirmed; check the Neutrik drawing.',src:'https://www.neutrik.com/media/8443/download/Drawing%20NCJ6FA-H.pdf?v=4'});
+// DMX / lighting
+D('DMX & lighting','nc5fd','XLR 5-pin female (DMX out)','NC5FD-L-1');
+D('DMX & lighting','nc5md','XLR 5-pin male (DMX in)','NC5MD-L-1');
+add('DMX & lighting','socapex19','Socapex 19-pin receptacle','Amphenol SL61 / SLDEF419',{cut:[circ(42.2)],holes:q4(34,34,3.5),flange:{w:46,h:46,r:3},desc:'Ø42.2 + 4×Ø3.5 on 34 square',conf:'low',note:'Shell size 30 assumed. Catalogue columns unlabelled. Get the Amphenol drawing before cutting. Needs 2U or more.',src:'https://docs.rs-online.com/3ea1/A700000009172906.pdf'});
+// Data & video
+D('Data & video','ne8fdp','etherCON RJ45 Cat5e','NE8FDP');
+D('Data & video','ne8fdx','etherCON Cat6A','NE8FDX-P6');
+D('Data & video','no2','opticalCON DUO','NO2-4FDW-A');
+D('Data & video','no4','opticalCON QUAD','NO4FDW-A');
+D('Data & video','no12','opticalCON MTP 12','NO12FDW-A');
+D('Data & video','nbb75dfg','BNC 75Ω (3G/12G SDI)','NBB-75DFG');
+D('Data & video','nbb75dfi','BNC 75Ω isolated','NBB-75DFI');
+D('Data & video','nausb','USB A/B feedthrough','NAUSB-W');
+D('Data & video','nahdmi','HDMI feedthrough','NAHDMI-W');
+D('Data & video','dgen','Other D-size insert','Any D-size (Amphenol, Switchcraft EH…)',{note:'Use for any connector sold in the Neutrik D-size housing.'});
+add('Data & video','bnc38','BNC bulkhead, nut mount','Amphenol 31-series 3/8-32',{cut:[{t:'dflat',d:9.5,f:3.95}],holes:[],flange:{w:14,h:14,round:true},desc:'Ø9.5 with one flat 8.7 across, nut mount',conf:'med',src:'https://www.alldatasheet.com/html-pdf/455739/AMPHENOL/31-321-RFX/4317/11/31-321-RFX.html'});
+add('Data & video','keystone','Keystone jack','Keystone 14.9×19.4',{cut:[rect(14.9,19.4)],holes:[],flange:{w:17,h:22,r:1},desc:'14.9 × 19.4 rectangle, snap-in',conf:'med',note:'Snap-in fit depends on panel thickness (most suit 1.5–2 mm).'});
+// Power
+D('Power','nac3mpa','powerCON in (blue)','NAC3MPA-1',{note:'Discontinued. Neutrik lists NAC3MPXXA as the replacement, same D-size cutout.',src:'https://www.neutrik.com/media/10218/download/BDA%20454%20V3%20-%20powerCON%20-%20NAC3MPA-1%20%2B%20NAC3MPB-1.pdf?v=2'});
+D('Power','nac3mpb','powerCON out (grey)','NAC3MPB-1',{note:'Discontinued. Same D-size cutout as current parts.'});
+D('Power','nac3mpx','powerCON TRUE1 in','NAC3MPX');
+D('Power','nac3mpxtop','powerCON TRUE1 TOP in','NAC3MPX-TOP',{src:'https://www.argosycable.com/storage/downloads/66277d56940db.pdf'});
+add('Power','nac3fpxtop','powerCON TRUE1 TOP out','NAC3FPX-TOP',{cut:[circ(28.7)],holes:[{x:-12.2,y:12.2,d:3.2},{x:12.2,y:-12.2,d:3.2}],flange:{w:32,h:32,r:2},desc:'Ø28.7 + Ø3.2 on 24.4×24.4 diagonal',conf:'low',note:'Larger than D-size. Number of screw holes not confirmed; check the Neutrik drawing.',src:'https://www.farnell.com/datasheets/2774734.pdf'});
+add('Power','c14s','IEC C14 inlet, screw mount','Schurter 6100-3',{cut:[rect(28,20,1)],holes:h2(40,3.5),flange:{w:48,h:23,r:2},desc:'28.0 × 20.0 R1 + 2×Ø3.5 at 40 pitch',conf:'med',note:'Front mount. Rear-mount version needs 28.5 × 21.',src:'https://www.schurter.com/en/datasheet/typ_6100-3.pdf'});
+add('Power','c14snap','IEC C14 inlet, snap-in','Schurter 6100-4 / Bulgin PX0575',{cut:[rect(27.5,20,1)],holes:[],flange:{w:31,h:23,r:2},desc:'27.5 × 20.0 R1 snap-in',conf:'low',note:'Exact size depends on panel thickness — order the variant that matches.',src:'https://www.schurter.com/en/datasheet/typ_6100-4.pdf'});
+add('Power','c14fuse','IEC C14 + fuse module, snap-in','Schurter 6200',{cut:[rect(27.5,31.5,1)],holes:[],flange:{w:34,h:36,r:2},desc:'27.5 × 31.5 R1 snap-in',conf:'low',note:'Not fully confirmed. Needs 2U.',src:'https://www.logosfoundation.org/instrum_gwr/tubo/IEC_Connector.pdf'});
+add('Power','c13s','IEC C13 outlet, screw mount','Schurter 6600-3',{cut:[rect(28,24.8,1)],holes:h2(40,3.5),flange:{w:50,h:32.5,r:2},desc:'28.0 × 24.8 R1 + 2×Ø3.5 at 40 pitch',conf:'low',src:'https://www.schurter.com/en/datasheet/typ_6600-3.pdf'});
+add('Power','cee16_3','CEE 16A 3-pin socket (blue)','MENNEKES 1661 / PCE 313-6',{cut:[circ(55)],holes:q4(60,60,5.5),flange:{w:75,h:75,r:3},desc:'Ø55 (verify) + 4×Ø5.5 on 60 square',conf:'low',note:'Flange and screw positions confirmed; cut-out diameter is on the drawing only. Needs 2U or more.',src:'https://www.mennekes.co.uk/product-details/1661/'});
+add('Power','cee32_3','CEE 32A 3-pin socket (blue)','MENNEKES / PCE',{cut:[circ(55)],holes:q4(60,60,5.5),flange:{w:75,h:75,r:3},desc:'Ø55 (verify) + 4×Ø5.5 on 60 square',conf:'low',note:'Same flange family as 16A. Confirm cut-out on drawing.',src:'https://www.site-electrics.co.uk/pdfs/Mennekes_Plugs_and_Couplers_Catalogue.pdf'});
+add('Power','cee16_5','CEE 16A 5-pin socket (red)','MENNEKES / PCE',{cut:[circ(55)],holes:q4(60,60,5.5),flange:{w:75,h:75,r:3},desc:'Ø55 (verify) + 4×Ø5.5 on 60 square',conf:'low',note:'Some compact 16A 5-pin parts use a 52 square pattern. Check your part.'});
+add('Power','cee32_5','CEE 32A 5-pin socket (red)','MENNEKES / PCE',{cut:[circ(55)],holes:q4(60,60,5.5),flange:{w:75,h:75,r:3},desc:'Ø55 (verify) + 4×Ø5.5 on 60 square',conf:'low'});
+add('Power','fuse520','Fuse holder 5×20','Schurter / Littelfuse / Bulgin',{cut:[{t:'dflat',d:12.5,f:5.75}],holes:[],flange:{w:16,h:16,round:true},desc:'Ø12.5 with flat 11.5 across',conf:'low',note:'Varies by maker.'});
+// Speaker & multipin
+D('Speaker & multipin','nl4mp','speakON 4-pole','NL4MP');
+D('Speaker & multipin','nl2mp','speakON 2-pole','NL2MP');
+add('Speaker & multipin','nl8mpr','speakON 8-pole','NL8MPR',{cut:[circ(31)],holes:q4(29.2,29.2,3.2),flange:{w:36,h:36,r:2},desc:'Ø31.0 + 4×Ø3.2 on 29.2 square (G-size)',conf:'med',src:'https://www.neutrik.com/media/10220/download/BDA%20458%20V2%20-%20speakON%20-%20NL2MP%20%2B%20NL4MP%20%2B%20NL8MPR.pdf?v=2'});
+add('Speaker & multipin','nl4mpr','speakON 4-pole, round flange','NL4MPR',{cut:[circ(31)],holes:q4(29.2,29.2,3.2),flange:{w:36,h:36,round:true},desc:'Ø31.0 + 4×Ø3.2 on 29.2 square (G-size, assumed)',conf:'low',note:'Assumed same G-size cutout as NL8MPR.',src:'https://www.neutrik.com/product/nl4mpr'});
+add('Speaker & multipin','han16b','Harting Han 16B housing','Han 16B bulkhead',{cut:[rect(82,35)],holes:[],flange:{w:92,h:45,r:3},desc:'82 × 35 rectangle (fixings not included)',conf:'low',note:'Add 4× M4 fixing holes from the Harting drawing using a custom part.',src:'https://www.farnell.com/datasheets/1682780.pdf'});
+add('Speaker & multipin','han24b','Harting Han 24B housing','Han 24B bulkhead',{cut:[rect(108,35)],holes:[],flange:{w:118,h:45,r:3},desc:'108 × 35 rectangle (fixings not included)',conf:'low',note:'Add 4× M4 fixing holes from the Harting drawing using a custom part.'});
+// VEAM
+add('VEAM','plsrc','Powerlock panel source (male) 400/660A','VEAM NPS-…-T4/T6/H6',{cut:[circ(44)],holes:q4(42.5,42.5,5.5),flange:{w:56,h:56,r:3},desc:'Ø44.0 + 4×Ø5.5 (M5) on 42.5 square',conf:'med',note:'Same cutout for every line colour (N, L1–L3, E) and both ratings. Flange size not published — 56 assumed for spacing only. Needs 2U.',src:'https://docs.rs-online.com/10cc/A700000008363803.pdf'});
+add('VEAM','pldrn','Powerlock panel drain (female) 400/660A','VEAM NPDFT-…-T4/T6',{cut:[circ(47)],holes:q4(42.5,42.5,5.5),flange:{w:56,h:56,r:3},desc:'Ø47.0 + 4×Ø5.5 (M5) on 42.5 square',conf:'med',note:'Same cutout for every line colour. Flange size not published — 56 assumed for spacing only. Needs 2U.',src:'https://docs.rs-online.com/10cc/A700000008363803.pdf'});
+[['10SL',25.40,18.26,3.05,16.6],['12S',27.80,20.62,3.05,19.8],['14S',30.20,23.01,3.05,23.0],['16S',32.50,24.61,3.05,26.1],['18',34.92,26.97,3.05,29.3],['20',38.10,29.36,3.05,32.5],['22',41.30,31.75,3.05,35.7],['24',44.45,34.92,3.74,38.8],['28',50.80,39.67,3.74,45.2],['32',57.15,44.45,4.40,51.5],['36',63.50,49.23,4.40,57.9]].forEach(([sh,S,R,T,U2])=>{
+  const d=+(U2+0.3).toFixed(1);
+  add('VEAM','cir'+sh.toLowerCase(),`CIR / MIL-5015 receptacle, shell ${sh}`,`VEAM CIR02 · MS3102 shell ${sh}`,{cut:[circ(d)],holes:q4(R,R,T),flange:{w:S,h:S,r:1.5},desc:`Ø${d} + 4×Ø${T} on ${R} square`,conf:'med',
+    note:`Square-flange box-mount receptacle. Hole sized to pass the coupling thread so it suits front or rear mounting.${['32','36'].includes(sh)?' Ten47 Tourline audio "VEAM" multipins may use countersunk holes — check the part drawing.':''}`,src:'https://in.c.misumi-ec.com/book/DDK1_ENG_E01/pdf/0065.pdf'});
+});
+// D-sub
+const DSUB=(id,name,pn,pitch,top,fw)=>add('D-sub','ds'+id,name,pn,{cut:[{t:'trap',top,bot:+(top-2*11.18*Math.tan(10*Math.PI/180)).toFixed(2),h:11.18}],holes:h2(pitch,3.2),flange:{w:fw,h:12.5,r:1},desc:`trapezoid ${top} top × 11.18 (10° sides) + 2×Ø3.2 at ${pitch} pitch`,conf:'high',src:'https://spectrumcontrol.com/asset/d-sub-board-panel-cutouts.pdf'});
+DSUB('9','D-sub 9 / HD-15 (VGA)','DE-9 / DE-15',24.99,19.74,30.8);
+DSUB('15','D-sub 15','DA-15',33.32,28.07,39.1);
+DSUB('25','D-sub 25','DB-25',47.04,41.78,53.0);
+DSUB('37','D-sub 37','DC-37',63.5,58.24,69.3);
+// Controls
+const RND=(cat,id,name,pn,d,fd,conf='med',note)=>add(cat,id,name,pn,{cut:[circ(d)],holes:[],flange:{w:fd,h:fd,round:true},desc:`Ø${d}`,conf,note});
+RND('Switches & indicators','toggle','Toggle switch 1/4"','1/4"-40 bushing',6.5,12,'med','Some toggles need an anti-rotation hole; add with a custom part.');
+RND('Switches & indicators','pb12','Push-button / indicator 12 mm','12 mm',12.2,16);
+RND('Switches & indicators','pb16','Push-button / indicator 16 mm','16 mm',16.2,20);
+RND('Switches & indicators','pb19','Push-button / indicator 19 mm','19 mm',19.2,24);
+RND('Switches & indicators','pb22','Push-button / pilot 22 mm','22 mm',22.3,30);
+add('Switches & indicators','estop22','E-stop / pilot 22 mm, keyed','22.3 mm + keyway',{cut:[{t:'keyed',d:22.3,n:3.2,k:24.1-11.15}],holes:[],flange:{w:40,h:40,round:true},desc:'Ø22.3 + keyway 3.2 wide to 24.1',conf:'med'});
+RND('Switches & indicators','led3','LED 3 mm, clip holder','3 mm holder',4.8,6.5,'med','Depends on holder.');
+RND('Switches & indicators','led5','LED 5 mm, clip holder','5 mm holder',6.4,8.5,'med','Depends on holder.');
+RND('Switches & indicators','led5b','LED 5 mm, metal bezel','5 mm bezel',8,11,'med');
+add('Switches & indicators','rocker','Rocker switch 21×15','Snap-in rocker',{cut:[rect(21,15)],holes:[],flange:{w:24,h:18,r:1},desc:'21.0 × 15.0 snap-in',conf:'med',note:'Check maker and panel thickness.'});
+// Fans & vents
+const FAN=(s,cut,p,hd)=>add('Fans & vents','fan'+s,`Fan ${s} mm`,`${s} mm axial`,{cut:[circ(cut)],holes:q4(p,p,hd),flange:{w:s,h:s,r:3},desc:`Ø${cut} + 4×Ø${hd} on ${p} square`,conf:'med'});
+FAN(40,38,32,3.5);FAN(60,57,50,4.3);FAN(80,76,71.5,4.3);FAN(92,88,82.5,4.3);FAN(120,116,105,4.3);
+add('Fans & vents','vent12','Vent slots ×12','3 × 25 slots, 7 pitch',{cut:Array.from({length:12},(_,i)=>rect(3,25,1.5,(i-5.5)*7,0)),holes:[],flange:{w:83,h:27,r:0},desc:'12 slots 3 × 25 R1.5 at 7 pitch',conf:'high',note:'Our own pattern, no maker part.',ref:true});
+add('Fans & vents','vent6','Vent slots ×6','3 × 25 slots, 7 pitch',{cut:Array.from({length:6},(_,i)=>rect(3,25,1.5,(i-2.5)*7,0)),holes:[],flange:{w:41,h:27,r:0},desc:'6 slots 3 × 25 R1.5 at 7 pitch',conf:'high',note:'Our own pattern, no maker part.',ref:true});
+
+/* ============ State ============ */
+const LS='kudos-rack-panel-v1';
+let customs=[]; // custom defs
+let logos=[];   // uploaded logos: {id,name,ar,polys:[[u,v,u,v…]]} normalised to width 1, y up
+let panels=[], cur=0;
+let sel=new Set(), view='cut', zoom=1, libCur=null;
+let undo=[], redo=[];
+const uid=()=>Math.random().toString(36).slice(2,9);
+const P=()=>panels[cur];
+const defOf=it=>LIB.find(d=>d.id===it.part)||customs.find(d=>d.id===it.part);
+const allDefs=()=>LIB.concat(customs);
+
+function examplePanel(){
+  const p=blankPanel('SB-1 stage box (example)');
+  p.job='Example — replace with your job'; p.U=1;
+  const W=482.6, y=24, pitch=34, n=12, x0=W/2-pitch*(n-1)/2;
+  const parts=['nc3fd','nc3fd','nc3fd','nc3fd','nc3fd','nc3fd','nc3fd','nc3fd','ne8fdp','ne8fdp','nac3mpx','nac3mpxtop'];
+  const labels=['1','2','3','4','5','6','7','8','NET A','NET B','MAINS IN','THRU'];
+  parts.forEach((pt,i)=>p.items.push({id:uid(),kind:'part',part:pt,x:+(x0+i*pitch).toFixed(2),y,rot:0,label:{text:labels[i],pos:'below',size:3}}));
+  return p;
+}
+function blankPanel(name){return {id:uid(),name:name||'New panel',job:'',client:'',rack:'19',U:1,thick:'2',finish:'black',fix:'slot',dfix:'four',qty:1,by:'Neal Chauhan',notes:'',items:[]};}
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(LS)||'null'); if(s&&Array.isArray(s.panels)&&s.panels.length){panels=s.panels;cur=Math.min(s.cur||0,panels.length-1);customs=s.customs||[];logos=s.logos||[];return;}}catch(e){}
+  panels=[examplePanel()];cur=0;
+}
+let saveT;
+function persist(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(LS,JSON.stringify({panels,cur,customs,logos}))}catch(e){}},300);}
+function snapshot(){return JSON.stringify(P());}
+function pushUndo(){undo.push(snapshot()); if(undo.length>80)undo.shift(); redo=[];}
+function doUndo(){if(!undo.length)return; redo.push(snapshot()); panels[cur]=JSON.parse(undo.pop()); pruneSel(); renderAll();}
+function doRedo(){if(!redo.length)return; undo.push(snapshot()); panels[cur]=JSON.parse(redo.pop()); pruneSel(); renderAll();}
+function pruneSel(){const ids=new Set(P().items.map(i=>i.id)); for(const s of [...sel]) if(!ids.has(s)) sel.delete(s);}
+
+/* ============ Geometry ============ */
+const rackW=p=>p.rack==='10'?254:482.6;
+const panelH=p=>+(p.U*44.45-0.8).toFixed(2);
+const holePitch=p=>p.rack==='10'?236.5:465.1;
+const opening=p=>p.rack==='10'?222.25:450;
+function mountHoles(p){
+  const W=rackW(p), hx=(W-holePitch(p))/2, out=[];
+  for(let k=0;k<p.U;k++){const b=k*44.45-0.4; for(const yy of [b+6.35,b+38.1]) for(const x of [hx,W-hx]) out.push({x:+x.toFixed(3),y:+yy.toFixed(3)});}
+  return out;
+}
+const rad=a=>a*Math.PI/180;
+function contourLocal(c){
+  const dx=c.dx||0, dy=c.dy||0; const segs=[];
+  const L=(x1,y1,x2,y2)=>{if(Math.hypot(x2-x1,y2-y1)>1e-6)segs.push({t:'L',x1:x1+dx,y1:y1+dy,x2:x2+dx,y2:y2+dy});};
+  const A=(cx,cy,r,a1,a2)=>{if(r>1e-6)segs.push({t:'A',cx:cx+dx,cy:cy+dy,r,a1,a2});};
+  if(c.t==='circle') return {circle:true,cx:dx,cy:dy,r:c.d/2};
+  if(c.t==='rect'){
+    const w=c.w/2,h=c.h/2,r=Math.min(c.r||0,w,h);
+    L(-w+r,-h,w-r,-h); A(w-r,-h+r,r,270,360); L(w,-h+r,w,h-r); A(w-r,h-r,r,0,90);
+    L(w-r,h,-w+r,h); A(-w+r,h-r,r,90,180); L(-w,h-r,-w,-h+r); A(-w+r,-h+r,r,180,270);
+  } else if(c.t==='dflat'){
+    const R=c.d/2,f=Math.min(c.f,R-0.01),x=Math.sqrt(R*R-f*f),th=Math.atan2(f,x)*180/Math.PI;
+    A(0,0,R,180-th,360+th); L(x,f,-x,f);
+  } else if(c.t==='keyed'){
+    const R=c.d/2,n=c.n/2,y0=Math.sqrt(R*R-n*n),k=c.k;
+    const aS=Math.atan2(y0,-n)*180/Math.PI, aE=Math.atan2(y0,n)*180/Math.PI+360;
+    A(0,0,R,aS,aE); L(n,y0,n,k); L(n,k,-n,k); L(-n,k,-n,y0);
+  } else if(c.t==='trap'){
+    const t=c.top/2,b=c.bot/2,h=c.h/2;
+    L(-b,-h,b,-h); L(b,-h,t,h); L(t,h,-t,h); L(-t,h,-b,-h);
+  }
+  return {segs};
+}
+function xf(x,y,it){const a=rad(it.rot||0),c=Math.cos(a),s=Math.sin(a);return [it.x+x*c-y*s, it.y+x*s+y*c];}
+function xfContour(k,it){
+  if(k.circle){const [cx,cy]=xf(k.cx,k.cy,it);return {circle:true,cx,cy,r:k.r};}
+  return {segs:k.segs.map(s=>{
+    if(s.t==='L'){const [x1,y1]=xf(s.x1,s.y1,it),[x2,y2]=xf(s.x2,s.y2,it);return {t:'L',x1,y1,x2,y2};}
+    const [cx,cy]=xf(s.cx,s.cy,it);return {t:'A',cx,cy,r:s.r,a1:s.a1+(it.rot||0),a2:s.a2+(it.rot||0)};
+  })};
+}
+function holesFor(def,it,p){
+  if(def.holes==='D'){
+    const m=it.dfix||p.dfix, d=3.2;
+    const all=[[-9.5,12],[9.5,12],[9.5,-12],[-9.5,-12]];
+    const pick=m==='tlbr'?[all[0],all[2]]:m==='trbl'?[all[1],all[3]]:all;
+    return pick.map(([x,y])=>{const [X,Y]=xf(x,y,it);return {x:X,y:Y,d};});
+  }
+  return (def.holes||[]).map(h=>{const [X,Y]=xf(h.x,h.y,it);return {x:X,y:Y,d:h.d};});
+}
+function geomOf(it,p){
+  const def=defOf(it); if(!def) return null;
+  const cuts=def.cut.map(c=>xfContour(contourLocal(c),it));
+  const holes=holesFor(def,it,p);
+  const rot=((it.rot||0)%180+180)%180===90;
+  const fw=rot?def.flange.h:def.flange.w, fh=rot?def.flange.w:def.flange.h;
+  return {def,cuts,holes,fw,fh,bbox:{x1:it.x-fw/2,x2:it.x+fw/2,y1:it.y-fh/2,y2:it.y+fh/2}};
+}
+function labelPos(it,g){
+  const L=it.label||{}; if(!L.text||L.pos==='none') return null;
+  const s=L.size||3, gap=L.gap??1.2;
+  if(L.pos==='above') return {x:it.x,y:g.bbox.y2+gap+s/2,anchor:'middle',s};
+  if(L.pos==='left') return {x:g.bbox.x1-gap,y:it.y,anchor:'end',s};
+  if(L.pos==='right') return {x:g.bbox.x2+gap,y:it.y,anchor:'start',s};
+  return {x:it.x,y:g.bbox.y1-gap-s/2,anchor:'middle',s};
+}
+function boxContour(b){return xfContour(contourLocal({t:'rect',w:b.w,h:b.h,r:b.r||0}),{x:b.x,y:b.y,rot:0});}
+function panelOutline(p){const W=rackW(p),H=panelH(p);return {segs:[{t:'L',x1:0,y1:0,x2:W,y2:0},{t:'L',x1:W,y1:0,x2:W,y2:H},{t:'L',x1:W,y1:H,x2:0,y2:H},{t:'L',x1:0,y1:H,x2:0,y2:0}]};}
+function mountContours(p){
+  return mountHoles(p).map(h=>p.fix==='round'?{circle:true,cx:h.x,cy:h.y,r:3.25}:xfContour(contourLocal({t:'rect',w:10,h:6.5,r:3.25}),{x:h.x,y:h.y,rot:0}));
+}
+function arcPt(cx,cy,r,a){return [cx+r*Math.cos(rad(a)),cy+r*Math.sin(rad(a))];}
+const logoOf=it=>logos.find(l=>l.id===it.logo);
+function logoGeom(it){
+  const L=logoOf(it); if(!L) return null;
+  const w=it.w, h=w*L.ar, x0=it.x-w/2, y0=it.y-h/2;
+  const polys=L.polys.map(f=>{const pts=[];for(let i=0;i<f.length;i+=2)pts.push([x0+f[i]*w,y0+f[i+1]*w]);
+    const a=pts[0],b=pts[pts.length-1];return {pts,closed:Math.hypot(a[0]-b[0],a[1]-b[1])<w*0.002};});
+  return {L,polys,w,h,bbox:{x1:x0,x2:x0+w,y1:y0,y2:y0+h}};
+}
+function logoPath(polys,H){return polys.map(p=>'M'+p.pts.map(([x,y])=>`${f2(x)} ${f2(H-y)}`).join('L')+(p.closed?'Z':'')).join('');}
+// Turn an uploaded SVG into engraving outlines: sample every shape along its length, split at move-tos, normalise.
+function parseLogoSVG(text,name){
+  const dom=new DOMParser().parseFromString(text,'image/svg+xml');
+  const root=dom.documentElement;
+  if(!root||root.nodeName.toLowerCase()!=='svg'||dom.querySelector('parsererror')) throw new Error('That file isn’t a readable SVG.');
+  root.querySelectorAll('script,foreignObject,image').forEach(n=>n.remove());
+  const host=document.createElement('div');
+  host.style.cssText='position:absolute;left:-10000px;top:0;width:800px;height:800px;overflow:hidden;visibility:hidden';
+  const svgEl=document.importNode(root,true); svgEl.setAttribute('width','800');svgEl.setAttribute('height','800');
+  host.appendChild(svgEl); document.body.appendChild(host);
+  try{
+    const els=[...svgEl.querySelectorAll('path,rect,circle,ellipse,polygon,polyline,line')].filter(e=>!e.closest('defs,clipPath,mask,symbol,pattern,marker'));
+    const hasText=svgEl.querySelector('text');
+    const rootM=svgEl.getScreenCTM().inverse();
+    let bb; try{bb=svgEl.getBBox();}catch(e){bb={width:100,height:100};}
+    const diag=Math.hypot(bb.width,bb.height)||100;
+    const raw=[];
+    for(const el of els){
+      let len=0; try{len=el.getTotalLength();}catch(e){continue;}
+      if(!(len>0)) continue;
+      const m=rootM.multiply(el.getScreenCTM());
+      const n=Math.min(6000,Math.max(16,Math.ceil(len/(diag/700))));
+      const step=len/n; let cur=[],prev=null;
+      for(let i=0;i<=n;i++){
+        const p=el.getPointAtLength(Math.min(len,i*step));
+        if(prev&&Math.hypot(p.x-prev.x,p.y-prev.y)>step*1.05+1e-6){if(cur.length>1)raw.push(cur);cur=[];}
+        const q=new DOMPoint(p.x,p.y).matrixTransform(m); cur.push([q.x,q.y]); prev=p;
+      }
+      if(cur.length>1) raw.push(cur);
+    }
+    if(!raw.length) throw new Error(hasText?'This SVG only has live text. Convert the text to outlines in Illustrator first.':'No shapes found in that SVG.');
+    let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
+    for(const r of raw)for(const [x,y] of r){x1=Math.min(x1,x);x2=Math.max(x2,x);y1=Math.min(y1,y);y2=Math.max(y2,y);}
+    const bw=x2-x1||1,bh=y2-y1||1;
+    const simplify=(pts,eps)=>{ // Ramer–Douglas–Peucker
+      if(pts.length<3) return pts; let dm=0,id=0;const [a,b]=[pts[0],pts[pts.length-1]];const dx=b[0]-a[0],dy=b[1]-a[1],dl=Math.hypot(dx,dy)||1e-9;
+      for(let i=1;i<pts.length-1;i++){const d=dl>1e-9?Math.abs(dy*pts[i][0]-dx*pts[i][1]+b[0]*a[1]-b[1]*a[0])/dl:Math.hypot(pts[i][0]-a[0],pts[i][1]-a[1]);if(d>dm){dm=d;id=i;}}
+      if(dm>eps){const l=simplify(pts.slice(0,id+1),eps),r=simplify(pts.slice(id),eps);return l.slice(0,-1).concat(r);} return [a,b];
+    };
+    const polys=raw.map(r=>simplify(r.map(([x,y])=>[(x-x1)/bw,(y2-y)/bw]),0.0006)).filter(p=>p.length>1)
+      .map(p=>p.flatMap(([u,v])=>[+u.toFixed(5),+v.toFixed(5)]));
+    return {id:'lg_'+uid(),name:name.replace(/\.svg$/i,''),ar:+(bh/bw).toFixed(5),polys,textWarn:!!hasText};
+  } finally { host.remove(); }
+}
+
+/* ============ Checks ============ */
+function checks(p){
+  const W=rackW(p),H=panelH(p),op=opening(p),rl=(W-op)/2,rr=W-rl,out=[],bad=new Set();
+  const parts=p.items.filter(i=>i.kind==='part').map(i=>({i,g:geomOf(i,p)})).filter(o=>o.g);
+  const ref=refMap(p);
+  for(const {i,g} of parts){
+    const b=g.bbox, r=ref.get(i.id);
+    if(b.y1<0.5||b.y2>H-0.5){out.push({lvl:'bad',id:i.id,msg:`${r} ${g.def.name}: flange runs off the panel edge. Use a taller panel or move it.`});bad.add(i.id);}
+    else if(b.x1<rl||b.x2>rr){out.push({lvl:'bad',id:i.id,msg:`${r} ${g.def.name}: sits over the rack rail. Keep it between ${rl.toFixed(1)} and ${rr.toFixed(1)} mm.`});bad.add(i.id);}
+    if(g.def.conf==='low') out.push({lvl:'warn',id:i.id,msg:`${r} ${g.def.name}: cutout not confirmed. Check against the maker's drawing before sending.`});
+  }
+  for(const i of p.items.filter(i=>i.kind==='logo')){const g=logoGeom(i);if(!g)continue;const b=g.bbox;
+    if(b.x1<0.5||b.x2>W-0.5||b.y1<0.5||b.y2>H-0.5){out.push({lvl:'bad',id:i.id,msg:`${ref.get(i.id)} logo runs off the panel. Make it smaller or move it.`});bad.add(i.id);}
+    const hit=parts.find(o=>!(o.g.bbox.x2<=b.x1||b.x2<=o.g.bbox.x1||o.g.bbox.y2<=b.y1||b.y2<=o.g.bbox.y1));
+    if(hit){out.push({lvl:'bad',id:i.id,msg:`${ref.get(i.id)} logo sits under ${ref.get(hit.i.id)} ${hit.g.def.name}.`});bad.add(i.id);}}
+  for(let a=0;a<parts.length;a++)for(let c=a+1;c<parts.length;c++){
+    const A=parts[a].g.bbox,B=parts[c].g.bbox;
+    const gx=Math.max(A.x1,B.x1)-Math.min(A.x2,B.x2), gy=Math.max(A.y1,B.y1)-Math.min(A.y2,B.y2);
+    if(gx<0.5&&gy<0.5){out.push({lvl:'bad',id:parts[c].i.id,msg:`${ref.get(parts[a].i.id)} and ${ref.get(parts[c].i.id)} flanges overlap or touch.`});bad.add(parts[a].i.id);bad.add(parts[c].i.id);}
+  }
+  return {list:out,bad};
+}
+function refMap(p){
+  const m=new Map(); let n=0,t=0,b=0;
+  const parts=p.items.filter(i=>i.kind==='part').slice().sort((a,c)=>(Math.abs(a.y-c.y)>8?c.y-a.y:a.x-c.x));
+  parts.forEach(i=>m.set(i.id,'C'+String(++n).padStart(2,'0')));
+  p.items.filter(i=>i.kind==='text').forEach(i=>m.set(i.id,'T'+String(++t).padStart(2,'0')));
+  p.items.filter(i=>i.kind==='box').forEach(i=>m.set(i.id,'B'+String(++b).padStart(2,'0')));
+  let l=0; p.items.filter(i=>i.kind==='logo').forEach(i=>m.set(i.id,'L'+String(++l).padStart(2,'0')));
+  return m;
+}
+
+/* ============ SVG rendering ============ */
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+const f2=v=>(Math.round(v*100)/100).toFixed(2);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const FIN={black:{a:'#1b1d20',b:'#2a2d32',eng:'#eef0f2',edge:'#0c0d0f'},natural:{a:'#bfc5cb',b:'#dde1e5',eng:'#1a1c1f',edge:'#8d959d'},white:{a:'#ecece8',b:'#f7f7f4',eng:'#16181a',edge:'#b9bbb6'}};
+function pathOf(k,H){
+  if(k.circle) return null;
+  const Y=y=>H-y; let d='', first=true;
+  for(const s of k.segs){
+    if(s.t==='L'){ if(first){d+=`M${f2(s.x1)} ${f2(Y(s.y1))}`;first=false;} d+=`L${f2(s.x2)} ${f2(Y(s.y2))}`; }
+    else { const [sx,sy]=arcPt(s.cx,s.cy,s.r,s.a1),[ex,ey]=arcPt(s.cx,s.cy,s.r,s.a2); if(first){d+=`M${f2(sx)} ${f2(Y(sy))}`;first=false;}
+      const sw=s.a2-s.a1; if(sw>=359.99){const [mx,my]=arcPt(s.cx,s.cy,s.r,s.a1+180); d+=`A${f2(s.r)} ${f2(s.r)} 0 0 0 ${f2(mx)} ${f2(Y(my))}`;}
+      d+=`A${f2(s.r)} ${f2(s.r)} 0 ${sw>180?1:0} 0 ${f2(ex)} ${f2(Y(ey))}`; }
+  }
+  return d+'Z';
+}
+function shapeSvg(k,H,attrs){
+  if(k.circle) return `<circle cx="${f2(k.cx)}" cy="${f2(H-k.cy)}" r="${f2(k.r)}" ${attrs}/>`;
+  return `<path d="${pathOf(k,H)}" ${attrs}/>`;
+}
+let guide=null;
+function renderCanvas(){
+  const p=P(),W=rackW(p),H=panelH(p),fin=FIN[p.finish]||FIN.black,op=opening(p),rl=(W-op)/2;
+  const pad=10, vbW=W+pad*2, vbH=H+pad*2;
+  svg.setAttribute('viewBox',`${-pad} ${-pad} ${vbW} ${vbH}`);
+  const stageW=$('stage').clientWidth-36;
+  svg.style.width=Math.max(320,stageW*zoom)+'px';
+  svg.style.height='auto';
+  const {bad}=checks(p);
+  let s=`<defs><linearGradient id="anod" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${fin.b}"/><stop offset=".55" stop-color="${fin.a}"/><stop offset="1" stop-color="${fin.a}"/></linearGradient></defs>`;
+  s+=`<rect x="0" y="0" width="${W}" height="${H}" fill="url(#anod)" stroke="${fin.edge}" stroke-width=".3"/>`;
+  // faint 10mm grid on panel
+  let gl='';for(let x=10;x<W;x+=10)gl+=`M${x} 0V${H}`;for(let y=10;y<H;y+=10)gl+=`M0 ${H-y}H${W}`;
+  s+=`<path d="${gl}" stroke="${fin.eng}" stroke-opacity=".06" stroke-width=".15"/>`;
+  // rails
+  s+=`<rect x="0" y="0" width="${rl}" height="${H}" fill="${fin.eng}" fill-opacity=".05"/><rect x="${W-rl}" y="0" width="${rl}" height="${H}" fill="${fin.eng}" fill-opacity=".05"/>`;
+  s+=`<path d="M${rl} 0V${H}M${W-rl} 0V${H}" stroke="${fin.eng}" stroke-opacity=".22" stroke-width=".2" stroke-dasharray="1.5 1.5"/>`;
+  s+=`<path d="M${W/2} -3V${H+3}" stroke="var(--accent)" stroke-opacity=".35" stroke-width=".2" stroke-dasharray="3 1.5 .5 1.5"/>`;
+  // mount holes
+  for(const k of mountContours(p)) s+=shapeSvg(k,H,`fill="var(--canvas)" stroke="${fin.edge}" stroke-width=".2"`);
+  // items
+  const ref=refMap(p);
+  for(const it of p.items){
+    if(it.kind==='part'){
+      const g=geomOf(it,p); if(!g) continue;
+      const b=g.bbox;
+      if(view==='fit'){
+        const fl=g.def.flange;
+        s+= fl.round?`<circle cx="${f2(it.x)}" cy="${f2(H-it.y)}" r="${f2(fl.w/2)}" fill="#33373c" stroke="#5c6168" stroke-width=".3"/>`
+          :`<rect x="${f2(b.x1)}" y="${f2(H-b.y2)}" width="${f2(g.fw)}" height="${f2(g.fh)}" rx="${fl.r||0}" fill="#33373c" stroke="#5c6168" stroke-width=".3"/>`;
+        for(const k of g.cuts) s+=shapeSvg(k,H,`fill="#0b0c0e" stroke="#4a4f55" stroke-width=".25"`);
+        for(const h of g.holes) s+=`<circle cx="${f2(h.x)}" cy="${f2(H-h.y)}" r="${f2(h.d/2+0.6)}" fill="#a7adb3" stroke="#6d7279" stroke-width=".2"/>`;
+      } else {
+        s+=`<rect x="${f2(b.x1)}" y="${f2(H-b.y2)}" width="${f2(g.fw)}" height="${f2(g.fh)}" rx="${g.def.flange.round?g.fw/2:(g.def.flange.r||0)}" fill="none" stroke="${fin.eng}" stroke-opacity=".3" stroke-width=".25" stroke-dasharray="1 .8"/>`;
+        for(const k of g.cuts) s+=shapeSvg(k,H,`fill="var(--canvas)" stroke="${fin.edge}" stroke-width=".2"`);
+        for(const h of g.holes) s+=`<circle cx="${f2(h.x)}" cy="${f2(H-h.y)}" r="${f2(h.d/2)}" fill="var(--canvas)" stroke="${fin.edge}" stroke-width=".15"/>`;
+        s+=`<path d="M${f2(it.x-1.5)} ${f2(H-it.y)}h3M${f2(it.x)} ${f2(H-it.y-1.5)}v3" stroke="var(--accent)" stroke-width=".18" opacity=".8"/>`;
+      }
+      const lp=labelPos(it,g);
+      if(lp) s+=`<text x="${f2(lp.x)}" y="${f2(H-lp.y)}" font-size="${lp.s}" text-anchor="${lp.anchor}" dominant-baseline="central" fill="${fin.eng}" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="600" letter-spacing=".1">${esc(it.label.text)}</text>`;
+      if(bad.has(it.id)) s+=`<rect x="${f2(b.x1-.8)}" y="${f2(H-b.y2-.8)}" width="${f2(g.fw+1.6)}" height="${f2(g.fh+1.6)}" fill="none" stroke="var(--bad)" stroke-width=".5"/>`;
+      if(sel.has(it.id)) s+=`<rect x="${f2(b.x1-1.4)}" y="${f2(H-b.y2-1.4)}" width="${f2(g.fw+2.8)}" height="${f2(g.fh+2.8)}" fill="none" stroke="var(--accent)" stroke-width=".45" stroke-dasharray="1.6 .8"/>`;
+      s+=`<rect data-hit="${it.id}" x="${f2(b.x1)}" y="${f2(H-b.y2)}" width="${f2(g.fw)}" height="${f2(g.fh)}" fill="transparent" style="cursor:move"><title>${esc(ref.get(it.id)+' · '+g.def.name+' '+g.def.pn)}</title></rect>`;
+    } else if(it.kind==='text'){
+      const w=Math.max(4,String(it.text).length*it.size*0.52);
+      s+=`<text x="${f2(it.x)}" y="${f2(H-it.y)}" font-size="${it.size}" text-anchor="middle" dominant-baseline="central" fill="${fin.eng}" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="600">${esc(it.text)}</text>`;
+      if(sel.has(it.id)) s+=`<rect x="${f2(it.x-w/2-1)}" y="${f2(H-it.y-it.size/2-1)}" width="${f2(w+2)}" height="${f2(it.size+2)}" fill="none" stroke="var(--accent)" stroke-width=".45" stroke-dasharray="1.6 .8"/>`;
+      s+=`<rect data-hit="${it.id}" x="${f2(it.x-w/2)}" y="${f2(H-it.y-it.size/2)}" width="${f2(w)}" height="${f2(it.size)}" fill="transparent" style="cursor:move"/>`;
+    } else if(it.kind==='box'){
+      s+=shapeSvg(boxContour(it),H,`fill="none" stroke="${fin.eng}" stroke-width="${it.lw||0.4}"`);
+      const x1=it.x-it.w/2,y2=it.y+it.h/2;
+      if(sel.has(it.id)) s+=`<rect x="${f2(x1-1)}" y="${f2(H-y2-1)}" width="${f2(it.w+2)}" height="${f2(it.h+2)}" fill="none" stroke="var(--accent)" stroke-width=".45" stroke-dasharray="1.6 .8"/>`;
+      // hit only on the border band so parts inside stay clickable
+      s+=`<rect data-hit="${it.id}" x="${f2(x1)}" y="${f2(H-y2)}" width="${f2(it.w)}" height="${f2(it.h)}" fill="none" stroke="transparent" stroke-width="2.5" pointer-events="stroke" style="cursor:move"/>`;
+    } else if(it.kind==='logo'){
+      const g=logoGeom(it); if(!g) continue; const b=g.bbox;
+      s+=it.fill===false?`<path d="${logoPath(g.polys,H)}" fill="none" stroke="${fin.eng}" stroke-width=".25"/>`:`<path d="${logoPath(g.polys,H)}" fill="${fin.eng}" fill-rule="evenodd"/>`;
+      if(bad.has(it.id)) s+=`<rect x="${f2(b.x1-.8)}" y="${f2(H-b.y2-.8)}" width="${f2(g.w+1.6)}" height="${f2(g.h+1.6)}" fill="none" stroke="var(--bad)" stroke-width=".5"/>`;
+      if(sel.has(it.id)) s+=`<rect x="${f2(b.x1-1.2)}" y="${f2(H-b.y2-1.2)}" width="${f2(g.w+2.4)}" height="${f2(g.h+2.4)}" fill="none" stroke="var(--accent)" stroke-width=".45" stroke-dasharray="1.6 .8"/>`;
+      s+=`<rect data-hit="${it.id}" x="${f2(b.x1)}" y="${f2(H-b.y2)}" width="${f2(g.w)}" height="${f2(g.h)}" fill="transparent" style="cursor:move"><title>${esc(g.L.name)}</title></rect>`;
+    }
+  }
+  if(guide) s+=`<path d="${guide}" stroke="var(--accent)" stroke-width=".25"/>`;
+  // dims hint
+  s+=`<text x="${W/2}" y="${H+7}" font-size="3.2" text-anchor="middle" fill="var(--muted)" font-family="JetBrains Mono, monospace">${f2(W)} × ${f2(H)} mm · ${p.U}U · ${p.thick} mm</text>`;
+  svg.innerHTML=s;
+}
+
+/* ============ Library UI ============ */
+function miniSvg(def){
+  const fw=def.flange.w,fh=def.flange.h,m=Math.max(fw,fh)*0.08, H=fh;
+  const it={x:fw/2,y:fh/2,rot:0};
+  let s=`<svg viewBox="${-m} ${-m} ${fw+2*m} ${fh+2*m}" aria-hidden="true">`;
+  s+=def.flange.round?`<circle cx="${fw/2}" cy="${fh/2}" r="${fw/2}" fill="none" stroke="var(--muted)" stroke-width="${fw*0.025}" stroke-dasharray="${fw*0.04} ${fw*0.03}"/>`
+    :`<rect x="0" y="0" width="${fw}" height="${fh}" rx="${def.flange.r||0}" fill="none" stroke="var(--muted)" stroke-width="${fw*0.025}" stroke-dasharray="${fw*0.04} ${fw*0.03}"/>`;
+  for(const c of def.cut) s+=shapeSvg(xfContour(contourLocal(c),it),H,`fill="var(--ink)"`);
+  const hs=def.holes==='D'?[[-9.5,12],[9.5,-12]].map(([x,y])=>({x,y,d:3.2})):def.holes;
+  for(const h of hs) s+=`<circle cx="${h.x+fw/2}" cy="${H-(h.y+fh/2)}" r="${h.d/2}" fill="var(--ink)"/>`;
+  return s+'</svg>';
+}
+function renderLib(){
+  const q=$('q').value.trim().toLowerCase();
+  const defs=allDefs().filter(d=>!q||(d.name+' '+d.pn+' '+d.cat+' '+(d.desc||'')).toLowerCase().includes(q));
+  const cats=[...new Set(defs.map(d=>d.cat))];
+  let h='';
+  const lg=logos.filter(l=>!q||('logo '+l.name).toLowerCase().includes(q));
+  if(lg.length||!q){
+    h+=`<div class="cat">Your logos</div>`;
+    for(const l of lg) h+=`<button class="libitem" data-logo="${l.id}" title="Add ${esc(l.name)} to the panel"><svg viewBox="-0.05 -0.05 1.1 ${l.ar+0.1}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="${l.polys.map(f=>{let d='';for(let i=0;i<f.length;i+=2)d+=(i?'L':'M')+f[i]+' '+(l.ar-f[i+1]);return d;}).join('')}" fill="var(--ink)" fill-rule="evenodd"/></svg><span style="min-width:0"><div class="nm">${esc(l.name)}</div><div class="pn">Engraved logo</div></span><span></span></button>`;
+    if(!q) h+=`<button class="libitem" data-upload="1"><svg viewBox="0 0 34 30" aria-hidden="true"><rect x="3" y="3" width="28" height="24" rx="3" fill="none" stroke="var(--muted)" stroke-dasharray="3 2"/><path d="M17 9v12M11 15h12" stroke="var(--accent)" stroke-width="2"/></svg><span style="min-width:0"><div class="nm">Upload logo</div><div class="pn">SVG file, text as outlines</div></span><span></span></button>`;
+  }
+  for(const c of cats){
+    h+=`<div class="cat">${esc(c)}</div>`;
+    for(const d of defs.filter(x=>x.cat===c)) h+=`<button class="libitem${libCur===d.id?' cur':''}" data-def="${d.id}" title="Add ${esc(d.name)} to the panel">${miniSvg(d)}<span style="min-width:0"><div class="nm">${esc(d.name)}</div><div class="pn">${esc(d.pn)}</div></span><i class="dot ${d.conf}" title="${confText(d.conf)}"></i></button>`;
+  }
+  if(!defs.length) h=`<p class="note" style="padding:12px">Nothing matches “${esc(q)}”. Add it as a custom part below.</p>`;
+  $('libList').innerHTML=h;
+  $('libCount').textContent=allDefs().length+' parts';
+  $('rPart').innerHTML=allDefs().map(d=>`<option value="${d.id}"${d.id===libCur?' selected':''}>${esc(d.name)} — ${esc(d.pn)}</option>`).join('');
+}
+const confText=c=>c==='high'?'Datasheet':c==='med'?'Check':'Verify';
+
+function addPart(id,x,y){
+  const p=P(),def=allDefs().find(d=>d.id===id); if(!def) return;
+  pushUndo();
+  const H=panelH(p),W=rackW(p);
+  if(x==null){ // find a free spot on the centre row, scanning out from the middle
+    y=Math.min(H/2+ (def.flange.h<H-10?2.5:0), H-def.flange.h/2-1); if(y<def.flange.h/2+1) y=H/2;
+    const op=opening(p),rl=(W-op)/2;
+    const cands=[];for(let dx=0;dx<op/2;dx+=2.5){cands.push(W/2+dx);if(dx)cands.push(W/2-dx);}
+    const fh=def.flange.h, ycands=[y];
+    for(let dy=2.5;dy<H/2;dy+=2.5){for(const v of [y+dy,y-dy]) if(v-fh/2>=1&&v+fh/2<=H-1) ycands.push(v);}
+    x=W/2; let found=false;
+    for(const yy of ycands){ for(const c of cands){const t={id:'_',kind:'part',part:id,x:c,y:yy,rot:0};const g=geomOf(t,p);
+      if(g.bbox.x1<rl||g.bbox.x2>W-rl) continue;
+      if(!p.items.some(o=>{if(o.kind!=='part')return false;const og=geomOf(o,p);if(!og)return false;return !(og.bbox.x2+2<=g.bbox.x1||g.bbox.x2+2<=og.bbox.x1||og.bbox.y2+1<=g.bbox.y1||g.bbox.y2+1<=og.bbox.y1);})){x=c;y=yy;found=true;break;}}
+      if(found) break; }
+    if(!found) setTimeout(()=>toast('No free space left — placed in the centre. Try a taller panel.'),0);
+  }
+  const it={id:uid(),kind:'part',part:id,x:+(+x).toFixed(2),y:+(+y).toFixed(2),rot:0,label:{text:'',pos:'below',size:3}};
+  p.items.push(it); sel=new Set([it.id]); libCur=id; renderAll(); renderLib();
+}
+
+/* ============ Inspector ============ */
+function numField(id,label,val,step=0.1){return `<label class="field"><span>${label}</span><input type="number" id="${id}" step="${step}" value="${val}"></label>`;}
+function renderInspector(){
+  const p=P(),el=$('insp'); const items=p.items.filter(i=>sel.has(i.id)); const ref=refMap(p);
+  const {list}=checks(p);
+  if(items.length===0){
+    $('inspTitle').textContent='Panel';
+    const W=rackW(p),H=panelH(p);
+    const parts=p.items.filter(i=>i.kind==='part');
+    const lows=new Set(parts.filter(i=>defOf(i)?.conf==='low').map(i=>defOf(i).name));
+    el.innerHTML=`<dl class="kv"><dt>Size</dt><dd>${f2(W)} × ${f2(H)} mm (${p.U}U)</dd><dt>Material</dt><dd>${p.thick} mm aluminium</dd><dt>Finish</dt><dd>${$('sFinish').selectedOptions[0]?.text||''}, engraved</dd><dt>Rack holes</dt><dd>${holePitch(p)} mm centres, ${p.fix==='slot'?'10 × 6.5 slots':'Ø6.5'}</dd><dt>Clear width</dt><dd>${f2(opening(p))} mm between rails</dd><dt>Parts</dt><dd>${parts.length} connectors, ${p.items.length-parts.length} engraving items</dd></dl>
+      <div><h3 style="font-size:15px;margin-bottom:6px">Checks</h3>${warnHtml(list)}</div>
+      <label class="field"><span>Notes for the maker</span><textarea id="pNotes" placeholder="e.g. Engraving infill white. Deburr all holes.">${esc(p.notes||'')}</textarea></label>
+      <p class="note" style="margin:0">Positions are measured to each part's centre from the panel's bottom-left corner, viewed from the front. The DXF uses the same origin.</p>`;
+    $('pNotes').addEventListener('change',e=>{pushUndo();p.notes=e.target.value;persist();});
+    return;
+  }
+  if(items.length>1){
+    $('inspTitle').textContent=items.length+' selected';
+    el.innerHTML=`<div class="row"><button class="btn sm" data-act="alignY">Align to one row</button><button class="btn sm" data-act="dist">Even spacing</button><button class="btn sm" data-act="spread">Spread across panel</button><button class="btn sm" data-act="centreY">Centre vertically</button><button class="btn sm" data-act="centreX">Centre group</button></div>
+      <div class="two">${numField('mPitch','Set pitch mm','',0.5)}<div class="field"><span>&nbsp;</span><button class="btn sm" data-act="pitch">Apply pitch</button></div></div>
+      <div class="row"><button class="btn sm" data-act="dupe">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>
+      <p class="note" style="margin:0">Align uses the first part you selected. Even spacing keeps the outer two in place.</p>`;
+    return;
+  }
+  const it=items[0];
+  if(it.kind==='part'){
+    const def=defOf(it),g=geomOf(it,p);
+    $('inspTitle').textContent=ref.get(it.id)+' · '+def.name;
+    el.innerHTML=`<div class="row"><span class="chip ${def.conf}"><i class="dot ${def.conf}"></i>${confText(def.conf)}</span><span class="mono note">${esc(def.pn)}</span></div>
+      <dl class="kv"><dt>Cutout</dt><dd>${esc(def.desc)}</dd><dt>Flange</dt><dd>${f2(def.flange.w)} × ${f2(def.flange.h)}${def.flange.round?' round':''}</dd>${def.note?`<dt>Note</dt><dd style="font-family:var(--f-body)">${esc(def.note)}</dd>`:''}${def.src?`<dt>Source</dt><dd><a href="${esc(def.src)}" target="_blank" rel="noopener">Datasheet</a></dd>`:''}</dl>
+      <div class="two">${numField('iX','X mm',f2(it.x))}${numField('iY','Y mm',f2(it.y))}</div>
+      <div class="two"><label class="field"><span>Rotation</span><select id="iRot">${[0,90,180,270].map(r=>`<option value="${r}"${(it.rot||0)===r?' selected':''}>${r}°</option>`).join('')}</select></label>
+      ${def.holes==='D'?`<label class="field"><span>Screws</span><select id="iDfix"><option value="">Panel default</option><option value="four"${it.dfix==='four'?' selected':''}>All 4</option><option value="tlbr"${it.dfix==='tlbr'?' selected':''}>Top-L / bottom-R</option><option value="trbl"${it.dfix==='trbl'?' selected':''}>Top-R / bottom-L</option></select></label>`:'<span></span>'}</div>
+      <label class="field"><span>Engraved label</span><input id="iLab" value="${esc(it.label?.text||'')}" placeholder="e.g. CH 1"></label>
+      <div class="two"><label class="field"><span>Label position</span><select id="iLpos">${['below','above','left','right','none'].map(v=>`<option${(it.label?.pos||'below')===v?' selected':''}>${v}</option>`).join('')}</select></label>${numField('iLsize','Text height mm',it.label?.size||3,0.5)}</div>
+      ${numField('iLgap','Label gap mm',it.label?.gap??1.2,0.1)}
+      <div class="row"><button class="btn sm" data-act="dupe">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>
+      ${warnHtml(list.filter(w=>w.id===it.id),true)}`;
+    const upd=(fn)=>e=>{pushUndo();fn(e.target.value);persist();renderCanvas();renderSchedule();};
+    $('iX').addEventListener('change',upd(v=>it.x=+v));
+    $('iY').addEventListener('change',upd(v=>it.y=+v));
+    $('iRot').addEventListener('change',upd(v=>it.rot=+v));
+    $('iDfix')?.addEventListener('change',upd(v=>{if(v)it.dfix=v;else delete it.dfix;}));
+    it.label=it.label||{text:'',pos:'below',size:3};
+    $('iLab').addEventListener('input',e=>{it.label.text=e.target.value;persist();renderCanvas();renderSchedule();});
+    $('iLab').addEventListener('focus',()=>pushUndo());
+    $('iLpos').addEventListener('change',upd(v=>it.label.pos=v));
+    $('iLsize').addEventListener('change',upd(v=>it.label.size=Math.max(1,+v)));
+    $('iLgap').addEventListener('change',upd(v=>it.label.gap=+v));
+  } else if(it.kind==='text'){
+    $('inspTitle').textContent=ref.get(it.id)+' · Engraved text';
+    el.innerHTML=`<label class="field"><span>Text</span><input id="tT" value="${esc(it.text)}"></label>
+      <div class="two">${numField('iX','X mm',f2(it.x))}${numField('iY','Y mm',f2(it.y))}</div>${numField('tS','Text height mm',it.size,0.5)}
+      <div class="row"><button class="btn sm" data-act="dupe">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>`;
+    $('tT').addEventListener('focus',()=>pushUndo());
+    $('tT').addEventListener('input',e=>{it.text=e.target.value;persist();renderCanvas();renderSchedule();});
+    const upd=(fn)=>e=>{pushUndo();fn(e.target.value);persist();renderCanvas();renderSchedule();};
+    $('iX').addEventListener('change',upd(v=>it.x=+v));$('iY').addEventListener('change',upd(v=>it.y=+v));$('tS').addEventListener('change',upd(v=>it.size=Math.max(1,+v)));
+  } else if(it.kind==='logo'){
+    const g=logoGeom(it);
+    $('inspTitle').textContent=ref.get(it.id)+' · '+(g?g.L.name:'Logo');
+    el.innerHTML=`<dl class="kv"><dt>Size</dt><dd>${g?f2(g.w)+' × '+f2(g.h)+' mm':'—'}</dd><dt>Outlines</dt><dd>${g?g.polys.length:0}</dd></dl>
+      <div class="two">${numField('iX','Centre X',f2(it.x))}${numField('iY','Centre Y',f2(it.y))}</div>
+      <div class="two">${numField('lW','Width mm',f2(it.w),0.5)}${numField('lH','Height mm',g?f2(g.h):'',0.5)}</div>
+      <label class="field"><span>Engrave as</span><select id="lFill"><option value="1"${it.fill!==false?' selected':''}>Filled (solid logo)</option><option value="0"${it.fill===false?' selected':''}>Outline only</option></select></label>
+      <p class="note" style="margin:0">Goes to the maker as closed outlines on the ENGRAVE layer. They fill it when “Filled” is chosen.</p>
+      <div class="row"><button class="btn sm" data-act="dupe">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>
+      <span id="lgDelWrap"><button class="btn sm" id="lgDel">Remove logo from library</button></span>`;
+    const upd=(fn)=>e=>{pushUndo();fn(e.target.value);persist();renderCanvas();renderSchedule();renderInspector();};
+    $('iX').addEventListener('change',upd(v=>it.x=+v));$('iY').addEventListener('change',upd(v=>it.y=+v));
+    $('lW').addEventListener('change',upd(v=>it.w=Math.max(2,+v)));
+    $('lH').addEventListener('change',upd(v=>{if(g&&g.L.ar>0)it.w=Math.max(2,+v/g.L.ar);}));
+    $('lFill').addEventListener('change',upd(v=>it.fill=v==='1'));
+    $('lgDel').onclick=()=>{const used=panels.reduce((n,pp)=>n+pp.items.filter(x=>x.kind==='logo'&&x.logo===it.logo).length,0);
+      $('lgDelWrap').innerHTML=`<span class="confirm">Remove it from the library and from ${used} place${used===1?'':'s'} it’s used? <button class="btn sm danger" id="lgY">Remove</button><button class="btn sm" id="lgN">Keep</button></span>`;
+      $('lgN').onclick=renderInspector;
+      $('lgY').onclick=()=>{pushUndo();const lid=it.logo;logos=logos.filter(l=>l.id!==lid);panels.forEach(pp=>pp.items=pp.items.filter(x=>!(x.kind==='logo'&&x.logo===lid)));sel.clear();persist();renderLib();renderAll();};};
+  } else {
+    $('inspTitle').textContent=ref.get(it.id)+' · Engraved box';
+    el.innerHTML=`<div class="two">${numField('iX','Centre X',f2(it.x))}${numField('iY','Centre Y',f2(it.y))}</div><div class="two">${numField('bW','Width',f2(it.w))}${numField('bH','Height',f2(it.h))}</div>${numField('bR','Corner radius',it.r||0)}
+      <p class="note" style="margin:0">Engraved outline, for grouping connectors (e.g. "OUTPUTS").</p>
+      <div class="row"><button class="btn sm" data-act="dupe">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>`;
+    const upd=(fn)=>e=>{pushUndo();fn(e.target.value);persist();renderCanvas();renderSchedule();};
+    $('iX').addEventListener('change',upd(v=>it.x=+v));$('iY').addEventListener('change',upd(v=>it.y=+v));
+    $('bW').addEventListener('change',upd(v=>it.w=Math.max(1,+v)));$('bH').addEventListener('change',upd(v=>it.h=Math.max(1,+v)));$('bR').addEventListener('change',upd(v=>it.r=Math.max(0,+v)));
+  }
+}
+function warnHtml(list,quiet){
+  if(!list.length) return quiet?'':`<ul class="warnlist"><li class="ok">No clashes. Everything sits between the rails.</li></ul>`;
+  return `<ul class="warnlist">${list.map(w=>`<li class="${w.lvl}">${esc(w.msg)}</li>`).join('')}</ul>`;
+}
+$('insp').addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]'); if(!b) return; const a=b.dataset.act, p=P();
+  const items=p.items.filter(i=>sel.has(i.id)); if(!items.length) return;
+  const order=[...sel].map(id=>p.items.find(i=>i.id===id)).filter(Boolean);
+  pushUndo();
+  if(a==='del'){p.items=p.items.filter(i=>!sel.has(i.id));sel.clear();}
+  else if(a==='dupe'){const ns=new Set();for(const i of items){const c=JSON.parse(JSON.stringify(i));c.id=uid();c.x+=items.length>1?0:(geomOf(i,p)?.fw||10)+4;c.y+=items.length>1?-(10):0;p.items.push(c);ns.add(c.id);}sel=ns;}
+  else if(a==='alignY'){const y=order[0].y;items.forEach(i=>i.y=y);}
+  else if(a==='centreY'){const H=panelH(p);items.forEach(i=>i.y=+(H/2).toFixed(2));}
+  else if(a==='centreX'){const xs=items.map(i=>i.x);const mid=(Math.min(...xs)+Math.max(...xs))/2,d=rackW(p)/2-mid;items.forEach(i=>i.x=+(i.x+d).toFixed(2));}
+  else if(a==='dist'){const s=items.slice().sort((x,y)=>x.x-y.x),n=s.length;if(n>2){const st=(s[n-1].x-s[0].x)/(n-1);s.forEach((i,k)=>i.x=+(s[0].x+k*st).toFixed(2));}}
+  else if(a==='pitch'){const pt=+$('mPitch').value;if(pt>0){const s=items.slice().sort((x,y)=>x.x-y.x);const mid=(s[0].x+s[s.length-1].x)/2,x0=mid-pt*(s.length-1)/2;s.forEach((i,k)=>i.x=+(x0+k*pt).toFixed(2));}}
+  else if(a==='spread'){const s=items.slice().sort((x,y)=>x.x-y.x);const ws=s.map(i=>geomOf(i,p)?.fw||10);const op=opening(p),rl=(rackW(p)-op)/2;const gap=(op-ws.reduce((a,b)=>a+b,0))/(s.length+1);let x=rl+gap;s.forEach((i,k)=>{i.x=+(x+ws[k]/2).toFixed(2);x+=ws[k]+gap;});}
+  persist();renderAll();
+});
+
+/* ============ Schedule ============ */
+function renderSchedule(){
+  const p=P(),ref=refMap(p),{bad}=checks(p);
+  const rows=p.items.slice().sort((a,b)=>ref.get(a.id).localeCompare(ref.get(b.id)));
+  $('schedBody').innerHTML=rows.map(it=>{
+    const d=it.kind==='part'?defOf(it):null;
+    const lgG=it.kind==='logo'?logoGeom(it):null;
+    const name=it.kind==='part'?(d?.name||'?'):it.kind==='text'?'Engraved text':it.kind==='logo'?'Engraved logo':'Engraved box';
+    const pn=it.kind==='part'?(d?.pn||''):it.kind==='text'?`${it.size} mm high`:it.kind==='logo'?(lgG?`${lgG.L.name} · ${f2(lgG.w)} × ${f2(lgG.h)}`:''):`${f2(it.w)} × ${f2(it.h)}`;
+    const lab=it.kind==='part'?(it.label?.text||''):it.kind==='text'?it.text:'';
+    const st=it.kind==='logo'&&bad.has(it.id)?`<span class="chip low">Off panel</span>`:it.kind==='part'?(bad.has(it.id)?`<span class="chip low">Clash</span>`:`<span class="chip ${d?.conf}">${confText(d?.conf)}</span>`):'';
+    return `<tr data-row="${it.id}" class="${sel.has(it.id)?'sel':''}"><td class="mono">${ref.get(it.id)}</td><td>${esc(name)}</td><td class="mono" style="font-size:12px">${esc(pn)}</td><td class="num">${f2(it.x)}</td><td class="num">${f2(it.y)}</td><td>${esc(lab)}</td><td>${st}</td></tr>`;
+  }).join('')||`<tr><td colspan="7" class="note">Click a part in the library to add it to the panel.</td></tr>`;
+  const {list}=checks(p); const nb=list.filter(w=>w.lvl==='bad').length, nw=list.filter(w=>w.lvl==='warn').length;
+  $('stWarn').innerHTML=nb?`<b style="color:var(--bad)">${nb} clash${nb>1?'es':''}</b>`:nw?`<b style="color:var(--warn)">${nw} to verify</b>`:`<b style="color:var(--ok)">Ready to send</b>`;
+}
+$('schedBody').addEventListener('click',e=>{const r=e.target.closest('[data-row]');if(!r)return;if(e.shiftKey){sel.has(r.dataset.row)?sel.delete(r.dataset.row):sel.add(r.dataset.row);}else sel=new Set([r.dataset.row]);renderAll();});
+
+/* ============ Settings binding ============ */
+for(let u=1;u<=8;u++) $('sU').insertAdjacentHTML('beforeend',`<option value="${u}">${u}U (${(u*44.45-0.8).toFixed(2)})</option>`);
+const bind=[['sName','name'],['sJob','job'],['sClient','client'],['sRack','rack'],['sU','U',Number],['sThick','thick'],['sFinish','finish'],['sFix','fix'],['sDfix','dfix'],['sQty','qty',Number],['sBy','by']];
+function syncSettings(){const p=P();for(const [id,k] of bind) $(id).value=p[k]??'';
+  $('panelSel').innerHTML=panels.map((x,i)=>`<option value="${i}"${i===cur?' selected':''}>${esc(x.name||'Untitled')}</option>`).join('');}
+for(const [id,k,cast] of bind){$(id).addEventListener('change',e=>{pushUndo();P()[k]=cast?cast(e.target.value):e.target.value;persist();renderAll();if(k==='name')syncSettings();});}
+$('panelSel').addEventListener('change',e=>{cur=+e.target.value;sel.clear();undo=[];redo=[];persist();renderAll();});
+$('bNew').onclick=()=>{panels.push(blankPanel('Panel '+(panels.length+1)));cur=panels.length-1;sel.clear();undo=[];redo=[];persist();renderAll();toast('New 1U panel added');};
+$('bDup').onclick=()=>{const c=JSON.parse(JSON.stringify(P()));c.id=uid();c.name+=' copy';panels.push(c);cur=panels.length-1;sel.clear();persist();renderAll();};
+function resetDel(){$('delWrap').innerHTML='<button class="btn danger" id="bDel">Delete</button>';bindDel();}
+function bindDel(){$('bDel').onclick=()=>{const w=$('delWrap');w.innerHTML=`<span class="confirm">Delete “${esc(P().name)}”? <button class="btn sm danger" id="dY">Delete</button><button class="btn sm" id="dN">Keep</button></span>`;$('dN').onclick=resetDel;$('dY').onclick=()=>{panels.splice(cur,1);if(!panels.length)panels.push(blankPanel());cur=Math.max(0,cur-1);sel.clear();undo=[];redo=[];persist();resetDel();renderAll();};};}
+
+/* ============ Canvas interaction ============ */
+function svgPt(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const r=pt.matrixTransform(svg.getScreenCTM().inverse());return {x:r.x,y:panelH(P())-r.y};}
+const gridV=()=>+$('grid').value;
+const snap=v=>+(Math.round(v/gridV())*gridV()).toFixed(2);
+let drag=null;
+svg.addEventListener('pointerdown',e=>{
+  const h=e.target.closest('[data-hit]');
+  if(!h){ if(!e.shiftKey){sel.clear();renderAll();} return; }
+  const id=h.dataset.hit;
+  if(e.shiftKey){sel.has(id)?sel.delete(id):sel.add(id);renderAll();return;}
+  if(!sel.has(id)){sel=new Set([id]);renderAll();}
+  const p=P(),start=svgPt(e);
+  drag={start,primary:id,orig:p.items.filter(i=>sel.has(i.id)).map(i=>({i,x:i.x,y:i.y})),moved:false};
+  svg.setPointerCapture(e.pointerId); e.preventDefault();
+});
+svg.addEventListener('pointermove',e=>{
+  const pt=svgPt(e); $('cx').textContent=f2(pt.x); $('cy').textContent=f2(pt.y);
+  if(!drag) return;
+  let dx=pt.x-drag.start.x, dy=pt.y-drag.start.y;
+  if(!drag.moved&&Math.hypot(dx,dy)<0.6) return;
+  if(!drag.moved){pushUndo();drag.moved=true;}
+  const p=P(),W=rackW(p),H=panelH(p),prim=drag.orig.find(o=>o.i.id===drag.primary);
+  let nx=snap(prim.x+dx), ny=snap(prim.y+dy); guide=null;
+  // magnetic: align to other items' Y, to the panel centre line and centre height
+  const others=p.items.filter(i=>!sel.has(i.id)&&i.kind==='part');
+  for(const o of others) if(Math.abs(o.y-ny)<1.2){ny=o.y;guide=`M0 ${f2(H-ny)}H${W}`;break;}
+  if(Math.abs(nx-W/2)<1.2){nx=+(W/2).toFixed(2);guide=(guide||'')+`M${f2(nx)} 0V${H}`;}
+  if(Math.abs(ny-H/2)<0.8&&!guide){ny=+(H/2).toFixed(2);guide=`M0 ${f2(H-ny)}H${W}`;}
+  dx=nx-prim.x; dy=ny-prim.y;
+  for(const o of drag.orig){o.i.x=+(o.x+dx).toFixed(2);o.i.y=+(o.y+dy).toFixed(2);}
+  renderCanvas();
+});
+const endDrag=()=>{if(drag){const m=drag.moved;drag=null;guide=null;if(m){persist();renderAll();}}};
+svg.addEventListener('pointerup',endDrag); svg.addEventListener('pointercancel',endDrag);
+svg.addEventListener('pointerleave',()=>{if(!drag){$('cx').textContent='—';$('cy').textContent='—';}});
+
+document.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea'||tag==='select') return;
+  const mod=e.metaKey||e.ctrlKey;
+  if(mod&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?doRedo():doUndo();return;}
+  if(mod&&e.key.toLowerCase()==='y'){e.preventDefault();doRedo();return;}
+  if(!sel.size) return;
+  const p=P(),items=p.items.filter(i=>sel.has(i.id));
+  if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();pushUndo();p.items=p.items.filter(i=>!sel.has(i.id));sel.clear();persist();renderAll();return;}
+  if(e.key==='Escape'){sel.clear();renderAll();return;}
+  if(mod&&e.key.toLowerCase()==='d'){e.preventDefault();$('insp').querySelector('[data-act=dupe]')?.click();return;}
+  const st=gridV()*(e.shiftKey?10:1);const mv={ArrowLeft:[-st,0],ArrowRight:[st,0],ArrowUp:[0,st],ArrowDown:[0,-st]}[e.key];
+  if(mv){e.preventDefault();if(!e.repeat)pushUndo();items.forEach(i=>{i.x=+(i.x+mv[0]).toFixed(2);i.y=+(i.y+mv[1]).toFixed(2);});persist();renderAll();}
+});
+
+$('libList').addEventListener('click',e=>{const b=e.target.closest('[data-def]');if(b)addPart(b.dataset.def);
+  const l=e.target.closest('[data-logo]');if(l)addLogo(l.dataset.logo);
+  if(e.target.closest('[data-upload]'))$('logoIn').click();});
+function addLogo(id){
+  const p=P(),L=logos.find(x=>x.id===id);if(!L)return;
+  const H=panelH(p),W=rackW(p);
+  let w=Math.min(60,(H-6)/Math.max(L.ar,0.05)); w=Math.max(5,+w.toFixed(1));
+  pushUndo();
+  const it={id:uid(),kind:'logo',logo:id,x:+(opening(p)===450?16.3+w/2+6:W/2).toFixed(2),y:+(H/2).toFixed(2),w,fill:true};
+  p.items.push(it);sel=new Set([it.id]);persist();renderAll();
+}
+$('tLogo').onclick=()=>$('logoIn').click();
+$('logoIn').addEventListener('change',e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  if(!/\.svg$/i.test(f.name)&&f.type!=='image/svg+xml'){toast('Logos need to be SVG so they engrave as vectors. Export an SVG from Illustrator or ask your designer.');return;}
+  const r=new FileReader();
+  r.onload=()=>{try{const L=parseLogoSVG(String(r.result),f.name);const textWarn=L.textWarn;delete L.textWarn;logos.push(L);persist();renderLib();addLogo(L.id);
+      toast(textWarn?'Logo added. Its live text was skipped — convert text to outlines and upload again.':`Added ${L.name} to Your logos`);}
+    catch(err){toast(err.message||'Couldn’t read that SVG.');}};
+  r.readAsText(f);
+});
+$('q').addEventListener('input',renderLib);
+$('vCut').onclick=()=>{view='cut';$('vCut').classList.add('on');$('vFit').classList.remove('on');renderCanvas();};
+$('vFit').onclick=()=>{view='fit';$('vFit').classList.add('on');$('vCut').classList.remove('on');renderCanvas();};
+$('zIn').onclick=()=>{zoom=Math.min(6,zoom*1.4);renderCanvas();};
+$('zOut').onclick=()=>{zoom=Math.max(0.5,zoom/1.4);renderCanvas();};
+$('zFit').onclick=()=>{zoom=1;renderCanvas();};
+$('bUndo').onclick=doUndo; $('bRedo').onclick=doRedo;
+$('tText').onclick=()=>{const p=P();pushUndo();const it={id:uid(),kind:'text',x:+(rackW(p)/2).toFixed(2),y:+(panelH(p)-5).toFixed(2),text:'LABEL',size:3.5};p.items.push(it);sel=new Set([it.id]);persist();renderAll();setTimeout(()=>{$('tT')?.select();},0);};
+$('tBox').onclick=()=>{const p=P();pushUndo();const it={id:uid(),kind:'box',x:+(rackW(p)/2).toFixed(2),y:+(panelH(p)/2).toFixed(2),w:100,h:Math.min(38,panelH(p)-4),r:2};p.items.push(it);sel=new Set([it.id]);persist();renderAll();};
+$('grid').value='0.5';
+window.addEventListener('resize',()=>renderCanvas());
+
+// Row form
+$('rowForm').addEventListener('toggle',()=>{const p=P();if(!$('rY').value)$('rY').value=f2(panelH(p)/2);if(!$('rX').value)$('rX').value=f2(rackW(p)/2);syncPitch();});
+function syncPitch(){const d=allDefs().find(x=>x.id===$('rPart').value);if(d)$('rPitch').value=(Math.ceil((d.flange.w+4)*2)/2);}
+$('rPart').addEventListener('change',syncPitch);
+$('rGo').onclick=()=>{
+  const p=P(),id=$('rPart').value,n=Math.max(1,Math.min(60,+$('rN').value||1)),pt=+$('rPitch').value,y=+$('rY').value,cx=+$('rX').value,pre=$('rPre').value,st=+$('rStart').value||1;
+  pushUndo(); const ns=new Set();
+  for(let k=0;k<n;k++){const it={id:uid(),kind:'part',part:id,x:+(cx+(k-(n-1)/2)*pt).toFixed(2),y,rot:0,label:{text:pre||$('rStart').value!==''?`${pre}${st+k}`:'',pos:'below',size:3}};p.items.push(it);ns.add(it.id);}
+  sel=ns; persist(); renderAll(); toast(`Added ${n} × ${allDefs().find(d=>d.id===id).name}`);
+};
+// Custom part
+$('cGo').onclick=()=>{
+  const name=$('cName').value.trim(); if(!name){toast('Give the custom part a name first');$('cName').focus();return;}
+  const sh=$('cShape').value,w=+$('cW').value,h=+$('cH').value,r=+$('cR').value,hd=+$('cHd').value,px=+$('cPx').value,py=+$('cPy').value;
+  if(!(w>0)){toast('Enter the cutout diameter or width');return;}
+  let cut,desc;
+  if(sh==='circle'){cut=[circ(w)];desc=`Ø${w}`;}
+  else if(sh==='rect'){if(!(h>0)){toast('Enter the rectangle height');return;}cut=[rect(w,h,r)];desc=`${w} × ${h}${r?' R'+r:''}`;}
+  else {if(!(h>0)){toast('Enter the distance across the flat');return;}cut=[{t:'dflat',d:w,f:h-w/2}];desc=`Ø${w} with flat ${h} across`;}
+  const hm=$('cHoles').value; let holes=[];
+  if(hm==='h2')holes=h2(px,hd); else if(hm==='v2')holes=[{x:0,y:-py/2,d:hd},{x:0,y:py/2,d:hd}]; else if(hm==='d2')holes=[{x:-px/2,y:py/2,d:hd},{x:px/2,y:-py/2,d:hd}]; else if(hm==='q4')holes=q4(px,py,hd);
+  if(holes.length) desc+=` + ${holes.length}×Ø${hd}`+(hm==='h2'?` at ${px} pitch`:hm==='v2'?` at ${py} pitch`:` on ${px}×${py}`);
+  const d={cat:'Custom',id:'cu_'+uid(),name,pn:$('cPn').value.trim()||'Custom',cut,holes,flange:{w:+$('cFw').value||w+4,h:+$('cFh').value||(h||w)+4,r:1},desc,conf:'med',note:'Custom part — dimensions entered by hand.'};
+  customs.push(d); persist(); renderLib(); addPart(d.id); toast('Saved to the library under Custom');
+};
+
+/* ============ Exports ============ */
+const slug=()=>(P().name||'panel').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'panel';
+const today=()=>new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+function allGeometry(p){
+  const out={outline:panelOutline(p),mount:mountContours(p),cuts:[],holes:[],texts:[],boxes:[],flanges:[],centres:[],logos:[]};
+  for(const it of p.items){
+    if(it.kind==='part'){const g=geomOf(it,p);if(!g)continue;out.cuts.push(...g.cuts);out.holes.push(...g.holes);out.flanges.push({b:g.bbox,round:g.def.flange.round});out.centres.push({x:it.x,y:it.y});
+      const lp=labelPos(it,g);if(lp)out.texts.push({x:lp.x,y:lp.y,s:lp.s,text:it.label.text,anchor:lp.anchor});}
+    else if(it.kind==='text') out.texts.push({x:it.x,y:it.y,s:it.size,text:it.text,anchor:'middle'});
+    else if(it.kind==='box') out.boxes.push(boxContour(it));
+    else if(it.kind==='logo'){const g=logoGeom(it);if(g)out.logos.push({polys:g.polys,fill:it.fill!==false});}
+  }
+  return out;
+}
+function makeDXF(p,withRef){
+  const G=allGeometry(p), n=v=>(+v).toFixed(4); const L=[];
+  const e=(...a)=>L.push(...a.map(String));
+  e(0,'SECTION',2,'HEADER',9,'$ACADVER',1,'AC1009',9,'$INSUNITS',70,4,9,'$MEASUREMENT',70,1,9,'$EXTMIN',10,0,20,0,30,0,9,'$EXTMAX',10,n(rackW(p)),20,n(panelH(p)),30,0,0,'ENDSEC');
+  const layers=[['OUTLINE',7],['CUT',1],['ENGRAVE',5]].concat(withRef?[['REFERENCE_NO_CUT',8]]:[]);
+  e(0,'SECTION',2,'TABLES',0,'TABLE',2,'LTYPE',70,1,0,'LTYPE',2,'CONTINUOUS',70,0,3,'Solid line',72,65,73,0,40,'0.0',0,'ENDTAB');
+  e(0,'TABLE',2,'LAYER',70,layers.length);for(const [nm,c] of layers)e(0,'LAYER',2,nm,70,0,62,c,6,'CONTINUOUS');e(0,'ENDTAB');
+  e(0,'TABLE',2,'STYLE',70,1,0,'STYLE',2,'STANDARD',70,0,40,'0.0',41,'1.0',50,'0.0',71,0,42,'2.5',3,'txt',4,'',0,'ENDTAB',0,'ENDSEC');
+  e(0,'SECTION',2,'ENTITIES');
+  const contour=(k,layer)=>{
+    if(k.circle){e(0,'CIRCLE',8,layer,10,n(k.cx),20,n(k.cy),30,0,40,n(k.r));return;}
+    for(const s of k.segs){
+      if(s.t==='L')e(0,'LINE',8,layer,10,n(s.x1),20,n(s.y1),30,0,11,n(s.x2),21,n(s.y2),31,0);
+      else if(s.a2-s.a1>=359.99) e(0,'CIRCLE',8,layer,10,n(s.cx),20,n(s.cy),30,0,40,n(s.r));
+      else e(0,'ARC',8,layer,10,n(s.cx),20,n(s.cy),30,0,40,n(s.r),50,n(((s.a1%360)+360)%360),51,n(((s.a2%360)+360)%360));
+    }
+  };
+  contour(G.outline,'OUTLINE');
+  G.mount.forEach(k=>contour(k,'CUT'));
+  G.cuts.forEach(k=>contour(k,'CUT'));
+  G.holes.forEach(h=>e(0,'CIRCLE',8,'CUT',10,n(h.x),20,n(h.y),30,0,40,n(h.d/2)));
+  G.boxes.forEach(k=>contour(k,'ENGRAVE'));
+  for(const lg of G.logos) for(const pl of lg.polys){
+    const pts=pl.closed?pl.pts.slice(0,-1):pl.pts; if(pts.length<2) continue;
+    e(0,'POLYLINE',8,'ENGRAVE',66,1,10,0,20,0,30,0,70,pl.closed?1:0);
+    for(const [x,y] of pts) e(0,'VERTEX',8,'ENGRAVE',10,n(x),20,n(y),30,0);
+    e(0,'SEQEND',8,'ENGRAVE');
+  }
+  for(const t of G.texts){const hj=t.anchor==='middle'?1:t.anchor==='end'?2:0;e(0,'TEXT',8,'ENGRAVE',10,n(t.x),20,n(t.y),30,0,40,n(t.s*0.72),1,t.text.replace(/[\r\n]/g,' '),7,'STANDARD',72,hj,11,n(t.x),21,n(t.y),31,0,73,2);}
+  if(withRef){for(const f of G.flanges){const b=f.b;if(f.round)e(0,'CIRCLE',8,'REFERENCE_NO_CUT',10,n((b.x1+b.x2)/2),20,n((b.y1+b.y2)/2),30,0,40,n((b.x2-b.x1)/2));else[[b.x1,b.y1,b.x2,b.y1],[b.x2,b.y1,b.x2,b.y2],[b.x2,b.y2,b.x1,b.y2],[b.x1,b.y2,b.x1,b.y1]].forEach(([a,c,d,f2_])=>e(0,'LINE',8,'REFERENCE_NO_CUT',10,n(a),20,n(c),30,0,11,n(d),21,n(f2_),31,0));}}
+  e(0,'ENDSEC',0,'EOF');
+  return L.join('\r\n')+'\r\n';
+}
+function makeSVG(p){
+  const G=allGeometry(p),W=rackW(p),H=panelH(p);
+  const at='fill="none" stroke-width="0.1"';
+  let s=`<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${f2(W)}mm" height="${f2(H)}mm" viewBox="0 0 ${f2(W)} ${f2(H)}">\n<!-- ${esc(p.name)} · units mm · red = cut, blue = engrave · ${p.thick} mm aluminium -->\n`;
+  s+=`<g id="OUTLINE" stroke="#000000">${shapeSvg(G.outline,H,at)}</g>\n<g id="CUT" stroke="#ff0000">`;
+  for(const k of G.mount.concat(G.cuts)) s+=shapeSvg(k,H,at);
+  for(const h of G.holes) s+=`<circle cx="${f2(h.x)}" cy="${f2(H-h.y)}" r="${f2(h.d/2)}" ${at}/>`;
+  s+=`</g>\n<g id="ENGRAVE" stroke="#0000ff">`;
+  for(const k of G.boxes) s+=shapeSvg(k,H,at);
+  for(const lg of G.logos) s+=lg.fill?`<path d="${logoPath(lg.polys,H)}" fill="#0000ff" fill-rule="evenodd" stroke="none"/>`:`<path d="${logoPath(lg.polys,H)}" ${at}/>`;
+  for(const t of G.texts) s+=`<text x="${f2(t.x)}" y="${f2(H-t.y)}" font-size="${t.s}" text-anchor="${t.anchor}" dominant-baseline="central" font-family="DIN 1451, Barlow Condensed, Arial Narrow, sans-serif" fill="#0000ff" stroke="none">${esc(t.text)}</text>`;
+  return s+`</g>\n</svg>\n`;
+}
+function scheduleRows(p){
+  const ref=refMap(p),rows=[];
+  const sorted=p.items.slice().sort((a,b)=>ref.get(a.id).localeCompare(ref.get(b.id)));
+  for(const it of sorted){
+    if(it.kind==='part'){const d=defOf(it);let desc=d.desc;
+      if(d.holes==='D'){const m=it.dfix||p.dfix;desc='Ø24.0 + '+(m==='four'?'4×Ø3.2 at ±9.5, ±12 (all D-size positions)':m==='tlbr'?'2×Ø3.2 top-left / bottom-right, 19×24':'2×Ø3.2 top-right / bottom-left, 19×24');}
+      rows.push({ref:ref.get(it.id),name:d.name,pn:d.pn,x:it.x,y:it.y,rot:it.rot||0,cut:desc,eng:it.label?.pos!=='none'?(it.label?.text||''):'',conf:d.conf});}
+    else if(it.kind==='text') rows.push({ref:ref.get(it.id),name:'Engraved text',pn:'',x:it.x,y:it.y,rot:0,cut:`Text height ${it.size} mm`,eng:it.text,conf:''});
+    else if(it.kind==='logo'){const g=logoGeom(it);if(g)rows.push({ref:ref.get(it.id),name:'Engraved logo',pn:g.L.name,x:it.x,y:it.y,rot:0,cut:`Logo ${f2(g.w)} × ${f2(g.h)} mm, ${it.fill!==false?'filled engraving':'outline engraving'} (layer ENGRAVE)`,eng:'',conf:''});}
+    else rows.push({ref:ref.get(it.id),name:'Engraved box',pn:'',x:it.x,y:it.y,rot:0,cut:`Outline ${f2(it.w)} × ${f2(it.h)}${it.r?' R'+it.r:''}, line 0.4`,eng:'',conf:''});
+  }
+  return rows;
+}
+function makePDF(p){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a3'});
+  const W=rackW(p),H=panelH(p),G=allGeometry(p),ref=refMap(p);
+  const PW=420,PH=297;
+  const scales=[[1,'1:1'],[1/1.5,'1:1.5'],[0.5,'1:2'],[0.4,'1:2.5'],[1/3,'1:3']];
+  const [sc,scTxt]=scales.find(([s])=>W*s<=330&&H*s<=150)||scales[scales.length-1];
+  const ox=(PW-W*sc)/2-12, oy=50+(150-H*sc)/2;
+  const X=x=>ox+x*sc, Y=y=>oy+(H-y)*sc;
+  const frame=(pg)=>{doc.setDrawColor(20);doc.setLineWidth(0.5);doc.rect(10,10,PW-20,PH-20);
+    doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(20);doc.text('KUDOS AV',16,18);doc.setFont('helvetica','normal');doc.text(`${p.name}  ·  Sheet ${pg} of 2`,PW-16,18,{align:'right'});doc.setLineWidth(0.2);doc.line(10,22,PW-10,22);};
+  frame(1);
+  const poly=(k)=>{
+    if(k.circle){doc.circle(X(k.cx),Y(k.cy),k.r*sc,'S');return;}
+    for(const s of k.segs){ if(s.t==='L') doc.line(X(s.x1),Y(s.y1),X(s.x2),Y(s.y2));
+      else{const n=Math.max(6,Math.ceil((s.a2-s.a1)/6));let [px,py]=arcPt(s.cx,s.cy,s.r,s.a1);for(let i=1;i<=n;i++){const [qx,qy]=arcPt(s.cx,s.cy,s.r,s.a1+(s.a2-s.a1)*i/n);doc.line(X(px),Y(py),X(qx),Y(qy));px=qx;py=qy;}}}
+  };
+  // flange reference (dashed grey)
+  doc.setDrawColor(170);doc.setLineWidth(0.12);doc.setLineDashPattern([1,0.8],0);
+  for(const f of G.flanges){const b=f.b;if(f.round)doc.circle(X((b.x1+b.x2)/2),Y((b.y1+b.y2)/2),(b.x2-b.x1)/2*sc,'S');else doc.rect(X(b.x1),Y(b.y2),(b.x2-b.x1)*sc,(b.y2-b.y1)*sc);}
+  doc.setLineDashPattern([],0);
+  // outline + cuts
+  doc.setDrawColor(0);doc.setLineWidth(0.35);poly(G.outline);
+  doc.setLineWidth(0.25);[...G.mount,...G.cuts].forEach(poly);G.holes.forEach(h=>doc.circle(X(h.x),Y(h.y),h.d/2*sc,'S'));
+  // engraving
+  doc.setDrawColor(30,80,200);doc.setTextColor(30,80,200);doc.setLineWidth(0.18);G.boxes.forEach(poly);
+  doc.setLineWidth(0.12);
+  for(const lg of G.logos) for(const pl of lg.polys){const pts=pl.pts;for(let i=1;i<pts.length;i++)doc.line(X(pts[i-1][0]),Y(pts[i-1][1]),X(pts[i][0]),Y(pts[i][1]));if(pl.closed&&pts.length>2){const a=pts[pts.length-1],b=pts[0];doc.line(X(a[0]),Y(a[1]),X(b[0]),Y(b[1]));}}
+  doc.setFont('helvetica','normal');
+  for(const t of G.texts){doc.setFontSize(Math.max(4,t.s*sc*2.83));doc.text(t.text,X(t.x),Y(t.y),{align:t.anchor==='middle'?'center':t.anchor==='end'?'right':'left',baseline:'middle'});}
+  // centre marks + refs
+  doc.setDrawColor(200,40,40);doc.setLineWidth(0.1);
+  for(const it of p.items){const cx=X(it.x),cy=Y(it.y);doc.line(cx-1.5,cy,cx+1.5,cy);doc.line(cx,cy-1.5,cx,cy+1.5);}
+  doc.setTextColor(200,40,40);doc.setFontSize(5);
+  for(const it of p.items.filter(i=>i.kind==='part')){const g=geomOf(it,p);if(g)doc.text(ref.get(it.id),X(g.bbox.x2)-0.4,Y(g.bbox.y2)+1.8,{align:'right'});}
+  // ordinate dims — X along the top
+  doc.setTextColor(20);doc.setDrawColor(120);doc.setFontSize(6);doc.setLineWidth(0.08);
+  const holes=mountHoles(p);
+  const xs=[...new Set([0,W,...holes.map(h=>+h.x.toFixed(2)),...p.items.map(i=>+i.x.toFixed(2))])].sort((a,b)=>a-b);
+  const top=Y(H);let last=-1e9;
+  for(const x of xs){const px=X(x);const tx=Math.max(px,last+2.6);last=tx;
+    doc.setDrawColor(205);doc.line(px,top,px,top-3);doc.setDrawColor(120);doc.line(px,top-3,tx,top-6);doc.line(tx,top-6,tx,top-7);
+    doc.text(f2(x),tx+0.8,top-7.5,{angle:90});}
+  // Y along the right
+  const ys=[...new Set([0,H,...holes.map(h=>+h.y.toFixed(2)),...p.items.map(i=>+i.y.toFixed(2))])].sort((a,b)=>a-b);
+  const right=X(W);last=1e9;
+  for(const y of ys){const py=Y(y);const ty=Math.min(py,last-2.6);last=ty;
+    doc.setDrawColor(205);doc.line(right,py,right+3,py);doc.setDrawColor(120);doc.line(right+3,py,right+6,ty);doc.line(right+6,ty,right+7,ty);
+    doc.text(f2(y),right+7.5,ty+0.8);}
+  // extension lines from features to edges (light)
+  doc.setDrawColor(225);doc.setLineWidth(0.06);
+  for(const it of p.items){doc.line(X(it.x),Y(it.y),X(it.x),top);doc.line(X(it.x),Y(it.y),right,Y(it.y));}
+  // overall dims
+  doc.setDrawColor(60);doc.setLineWidth(0.12);const by=Y(0)+8;doc.line(X(0),Y(0)+1,X(0),by+1);doc.line(X(W),Y(0)+1,X(W),by+1);doc.line(X(0),by,X(W),by);
+  const arr=(x,y,dir)=>{doc.line(x,y,x+dir*2,y-0.7);doc.line(x,y,x+dir*2,y+0.7);};arr(X(0),by,1);arr(X(W),by,-1);
+  doc.setFontSize(8);doc.setTextColor(20);doc.text(f2(W),X(W/2),by-1.2,{align:'center'});
+  const lx=X(0)-8;doc.line(X(0)-1,Y(0),lx-1,Y(0));doc.line(X(0)-1,Y(H),lx-1,Y(H));doc.line(lx,Y(0),lx,Y(H));
+  const arv=(x,y,dir)=>{doc.line(x,y,x-0.7,y+dir*2);doc.line(x,y,x+0.7,y+dir*2);};arv(lx,Y(H),1);arv(lx,Y(0),-1);
+  doc.text(`${f2(H)} (${p.U}U)`,lx-1.5,Y(H/2),{angle:90,align:'center'});
+  doc.setFontSize(7);doc.setTextColor(90);doc.text('ORIGIN 0,0',X(0)-1,Y(0)+4,{align:'right'});
+  doc.setFontSize(7.5);doc.text('VIEWED FROM FRONT · ALL DIMENSIONS IN mm TO HOLE CENTRES FROM BOTTOM-LEFT CORNER',X(0),top-24);
+  // notes
+  const {list}=checks(p);
+  const lows=[...new Set(p.items.filter(i=>i.kind==='part'&&defOf(i)?.conf==='low').map(i=>`${defOf(i).name} (${defOf(i).pn})`))];
+  let notes=[`1. Material: ${p.thick} mm aluminium. Finish: ${({black:'black anodised',natural:'natural / clear anodised',white:'white powder coat'})[p.finish]}.`,
+    `2. Engraving: text and outlines on layer ENGRAVE, infill ${p.finish==='black'?'white':'black'}. Set text in the maker's engraving font (DIN 1451 or similar) at the heights given.`,
+    `3. Tolerance ±0.1 on holes and positions unless stated. Deburr all edges.`,
+    `4. Rack fixings: ${p.fix==='slot'?'10 × 6.5 slots':'Ø6.5 holes'} at ${holePitch(p)} centres to EIA-310.`,
+    `5. Neutrik D-size: ${p.dfix==='four'?'all 4 screw positions drilled so connectors fit either way round':p.dfix==='tlbr'?'screws top-left and bottom-right':'screws top-right and bottom-left'}.`];
+  if(lows.length) notes.push(`6. CHECK BEFORE CUTTING — cutout taken from secondary sources: ${lows.join('; ')}.`);
+  if(p.notes) notes.push(`${notes.length+1}. ${p.notes}`);
+  if(list.some(w=>w.lvl==='bad')) notes.push(`DRAFT — layout has ${list.filter(w=>w.lvl==='bad').length} clash(es).`);
+  doc.setFontSize(8);doc.setTextColor(20);doc.setFont('helvetica','bold');doc.text('NOTES',16,232);doc.setFont('helvetica','normal');
+  let ny=237;for(const nt of notes){const lines=doc.splitTextToSize(nt,200);doc.text(lines,16,ny);ny+=lines.length*3.6+0.8;}
+  // title block
+  const tb=(x,y,w,h,label,val,big)=>{doc.setDrawColor(20);doc.setLineWidth(0.2);doc.rect(x,y,w,h);doc.setFontSize(5.5);doc.setTextColor(110);doc.text(label.toUpperCase(),x+1.5,y+3);doc.setTextColor(20);doc.setFontSize(big?13:8.5);doc.setFont('helvetica',big?'bold':'normal');doc.text(String(val||'—'),x+1.5,y+h-2.2,{maxWidth:w-3});doc.setFont('helvetica','normal');};
+  const tx=228,ty=232;
+  tb(tx,ty,182,15,'Panel',p.name,true);
+  tb(tx,ty+15,91,10,'Job',p.job);tb(tx+91,ty+15,91,10,'Client',p.client);
+  tb(tx,ty+25,46,10,'Size',`${p.rack}" ${p.U}U · ${f2(W)}×${f2(H)}`);tb(tx+46,ty+25,30,10,'Material',`${p.thick} mm Al`);tb(tx+76,ty+25,40,10,'Finish',({black:'Black anodised',natural:'Natural anod.',white:'White powder'})[p.finish]);tb(tx+116,ty+25,22,10,'Qty',p.qty);tb(tx+138,ty+25,22,10,'Scale (A3)',scTxt);tb(tx+160,ty+25,22,10,'Sheet','1 / 2');
+  tb(tx,ty+35,91,10,'Drawn',`${p.by||''} · Kudos AV`);tb(tx+91,ty+35,91,10,'Date',today());
+  // ===== Page 2 — schedule
+  doc.addPage('a3','landscape');frame(2);
+  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('CUTOUT AND ENGRAVING SCHEDULE',16,32);
+  doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(90);doc.text('X and Y are centre positions in mm from the bottom-left corner of the panel, viewed from the front. Rotation is anticlockwise.',16,37);
+  const cols=[['Ref',14],['Part',62],['Part no.',44],['X',20],['Y',20],['Rot',12],['Cutout',138],['Engraving',48],['Status',30]];
+  let y=44,x0=16;
+  const head=()=>{doc.setFillColor(235,238,242);doc.rect(x0,y-4,cols.reduce((a,c)=>a+c[1],0),6.5,'F');doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(20);let x=x0;for(const [h,w] of cols){doc.text(h,['X','Y','Rot'].includes(h)?x+w-2:x+1.5,y,{align:['X','Y','Rot'].includes(h)?'right':'left'});x+=w;}doc.setFont('helvetica','normal');y+=6;};
+  head();
+  const rows=scheduleRows(p);
+  rows.unshift({ref:'M',name:'Rack fixings',pn:'EIA-310',x:null,y:null,rot:0,cut:`${holes.length}× ${p.fix==='slot'?'slot 10 × 6.5 (horizontal)':'Ø6.5'} at X ${f2(holes[0].x)} / ${f2(W-holes[0].x)}, Y ${[...new Set(holes.map(h=>f2(h.y)))].join(' / ')}`,eng:'',conf:''});
+  for(const r of rows){
+    const cells=[r.ref,r.name,r.pn,r.x==null?'':f2(r.x),r.y==null?'':f2(r.y),r.x==null?'':r.rot+'°',r.cut,r.eng,r.conf==='high'?'Datasheet':r.conf==='med'?'Check':r.conf==='low'?'VERIFY':''];
+    const wrapped=cells.map((c,i)=>doc.splitTextToSize(String(c),cols[i][1]-3));
+    const h=Math.max(...wrapped.map(w=>w.length))*3.3+2.2;
+    if(y+h>PH-16){doc.addPage('a3','landscape');frame(2);y=32;head();}
+    let x=x0;doc.setFontSize(7.5);
+    wrapped.forEach((w,i)=>{const num=[3,4,5].includes(i);if(i===8&&r.conf==='low')doc.setTextColor(200,40,40);else doc.setTextColor(20);doc.text(w,num?x+cols[i][1]-2:x+1.5,y,{align:num?'right':'left'});x+=cols[i][1];});
+    doc.setDrawColor(215);doc.setLineWidth(0.1);doc.line(x0,y+h-3.2,x0+cols.reduce((a,c)=>a+c[1],0),y+h-3.2);
+    y+=h;
+  }
+  return doc.output('arraybuffer');
+}
+async function saveFile(filename,data,mime){
+  const c=window.claude;
+  if(c&&typeof c.use==='function'){
+    let dl=null; try{dl=await c.use('downloads');}catch(e){}
+    if(dl){try{await dl.save({filename,data});toast('Saved '+filename);}catch(e){if(e&&e.code==='declined')return;if(e&&e.code==='rejected_extension'){toast('This file type can’t be saved here — use Fabrication pack (.zip).');return;}toast('Couldn’t save: '+(e&&e.message||'unknown error'));}return;}
+    toast('Downloads aren’t available in this view. Open the HTML copy in your Dropbox folder.');return;
+  }
+  const blob=data instanceof Blob?data:new Blob([data],{type:mime});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);toast('Saved '+filename);
+}
+function guardClash(){const n=checks(P()).list.filter(w=>w.lvl==='bad').length;if(n)toast(`Exported as DRAFT — ${n} clash${n>1?'es':''} to fix first`);}
+$('bPdf').onclick=async()=>{if(!window.jspdf){toast('PDF library didn’t load. Check your connection and reload.');return;}guardClash();await saveFile(slug()+'-drawing.pdf',new Uint8Array(makePDF(P())),'application/pdf');};
+$('bSvg').onclick=()=>saveFile(slug()+'.svg',makeSVG(P()),'image/svg+xml');
+$('bDxf').onclick=()=>{guardClash();saveFile(slug()+'.dxf',makeDXF(P(),false),'application/dxf');};
+$('bSave').onclick=()=>{const p=P();const used=new Set(p.items.map(i=>i.part));saveFile(slug()+'.rackpanel.json',JSON.stringify({app:'kudos-rack-panel',v:1,panel:p,customs:customs.filter(c=>used.has(c.id)),logos:logos.filter(l=>p.items.some(i=>i.logo===l.id))},null,1),'application/json');};
+$('bOpen').onclick=()=>$('fileIn').click();
+$('fileIn').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.panel||!Array.isArray(j.panel.items))throw 0;for(const c of j.customs||[])if(!customs.some(x=>x.id===c.id))customs.push(c);for(const l of j.logos||[])if(!logos.some(x=>x.id===l.id))logos.push(l);j.panel.id=uid();panels.push(j.panel);cur=panels.length-1;sel.clear();undo=[];redo=[];persist();renderLib();renderAll();toast('Opened '+j.panel.name);}catch(err){toast('That file isn’t a rack panel project (.rackpanel.json).');}e.target.value='';};r.readAsText(f);});
+$('bZip').onclick=async()=>{
+  if(!window.JSZip||!window.jspdf){toast('Export libraries didn’t load. Check your connection and reload.');return;}
+  guardClash();
+  const p=P(),z=new JSZip(),s=slug(),{list}=checks(p);
+  z.file(s+'.dxf',makeDXF(p,false));
+  z.file(s+'-with-reference.dxf',makeDXF(p,true));
+  z.file(s+'-drawing.pdf',makePDF(p));
+  z.file(s+'.svg',makeSVG(p));
+  const used=new Set(p.items.map(i=>i.part));
+  z.file(s+'.rackpanel.json',JSON.stringify({app:'kudos-rack-panel',v:1,panel:p,customs:customs.filter(c=>used.has(c.id)),logos:logos.filter(l=>p.items.some(i=>i.logo===l.id))},null,1));
+  const rows=scheduleRows(p);
+  z.file('README.txt',[`${p.name} — ${p.job||''}`,`Kudos AV · ${p.by||''} · ${today()}`,'',`${p.rack}" rack panel, ${p.U}U (${f2(rackW(p))} x ${f2(panelH(p))} mm), ${p.thick} mm aluminium, ${p.finish}. Qty ${p.qty}.`,'',
+    'FILES',`  ${s}.dxf                 Cut + engrave (layers OUTLINE, CUT, ENGRAVE). Units mm, origin bottom-left, front view.`,`  ${s}-with-reference.dxf  As above plus REFERENCE_NO_CUT layer showing connector flanges. Do not cut that layer.`,`  ${s}-drawing.pdf         Dimensioned drawing and cutout schedule (A3).`,`  ${s}.svg                 Same geometry for laser software (red cut, blue engrave).`,`  ${s}.rackpanel.json      Project file for the Kudos Rack Panel Designer.`,'',
+    'CUTOUT SCHEDULE (X, Y centre from bottom-left, mm)',...rows.map(r=>`  ${r.ref.padEnd(4)} ${String(r.name).padEnd(34)} X ${f2(r.x).padStart(7)}  Y ${f2(r.y).padStart(6)}  ${r.cut}${r.eng?'  ["'+r.eng+'"]':''}${r.conf==='low'?'  ** VERIFY **':''}`),
+    '',...(list.length?['CHECKS',...list.map(w=>'  - '+w.msg)]:['CHECKS','  No clashes.']),''].join('\r\n'));
+  const blob=await z.generateAsync({type:'blob'});
+  await saveFile(s+'-fabrication-pack.zip',blob,'application/zip');
+};
+
+/* ============ Misc ============ */
+let toastT;function toast(m){let t=document.querySelector('.toast');if(!t){t=document.createElement('div');t.className='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200);}
+function renderAll(){syncSettings();renderCanvas();renderSchedule();renderInspector();$('bUndo').disabled=!undo.length;$('bRedo').disabled=!redo.length;}
+load(); bindDel();
+if(!(window.claude&&typeof window.claude.use==='function')) $('bDxf').hidden=false;
+renderLib(); renderAll();
+window.__rack={makeDXF,makeSVG,makePDF,P:()=>P(),checks,LIB,addPart,panels:()=>panels};
+})();
+</script>
