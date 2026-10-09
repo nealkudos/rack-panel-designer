@@ -204,8 +204,8 @@ a{color:var(--accent)}
         <span class="sep"></span>
         <button class="btn sm" id="tText">+ Text</button>
         <button class="btn sm" id="tBox">+ Box</button>
-        <button class="btn sm" id="tLogo" title="Upload an SVG logo to engrave">+ Logo</button>
-        <input type="file" id="logoIn" accept=".svg,image/svg+xml" hidden>
+        <button class="btn sm" id="tLogo" title="Upload a logo to engrave (SVG, PNG or JPG)">+ Logo</button>
+        <input type="file" id="logoIn" accept=".svg,.png,.jpg,.jpeg,.webp,image/svg+xml,image/png,image/jpeg,image/webp" hidden>
       </div>
       <div class="stage" id="stage"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
       <div class="status"><span>X <b id="cx">—</b> · Y <b id="cy">—</b> <span>mm from bottom-left</span></span><span id="stWarn"></span><span>Drag to move · Shift-click to multi-select · Arrows nudge</span></div>
@@ -312,6 +312,15 @@ const FAN=(s,cut,p,hd)=>add('Fans & vents','fan'+s,`Fan ${s} mm`,`${s} mm axial`
 FAN(40,38,32,3.5);FAN(60,57,50,4.3);FAN(80,76,71.5,4.3);FAN(92,88,82.5,4.3);FAN(120,116,105,4.3);
 add('Fans & vents','vent12','Vent slots ×12','3 × 25 slots, 7 pitch',{cut:Array.from({length:12},(_,i)=>rect(3,25,1.5,(i-5.5)*7,0)),holes:[],flange:{w:83,h:27,r:0},desc:'12 slots 3 × 25 R1.5 at 7 pitch',conf:'high',note:'Our own pattern, no maker part.',ref:true});
 add('Fans & vents','vent6','Vent slots ×6','3 × 25 slots, 7 pitch',{cut:Array.from({length:6},(_,i)=>rect(3,25,1.5,(i-2.5)*7,0)),holes:[],flange:{w:41,h:27,r:0},desc:'6 slots 3 × 25 R1.5 at 7 pitch',conf:'high',note:'Our own pattern, no maker part.',ref:true});
+
+// Short names for the drawing labels
+const SHORT={nc3fd:'XLR3 F',nc3md:'XLR3 M',nc4fd:'XLR4 F',nc4md:'XLR4 M',nj3fp6c:'JACK',ncj6fa:'COMBO',nc5fd:'XLR5 F',nc5md:'XLR5 M',socapex19:'SOCA 19',
+  ne8fdp:'etherCON',ne8fdx:'CAT6A',no2:'optCON DUO',no4:'optCON QUAD',no12:'MTP 12',nbb75dfg:'BNC',nbb75dfi:'BNC ISO',nausb:'USB',nahdmi:'HDMI',dgen:'D-SIZE',bnc38:'BNC',keystone:'KEYSTONE',
+  nac3mpa:'PCON IN',nac3mpb:'PCON OUT',nac3mpx:'TRUE1 IN',nac3mpxtop:'TRUE1 TOP IN',nac3fpxtop:'TRUE1 TOP OUT',c14s:'IEC C14',c14snap:'IEC C14',c14fuse:'IEC + FUSE',c13s:'IEC C13',
+  cee16_3:'16A CEE',cee32_3:'32A CEE',cee16_5:'16A 5P',cee32_5:'32A 5P',fuse520:'FUSE',nl4mp:'NL4',nl2mp:'NL2',nl8mpr:'NL8',nl4mpr:'NL4',han16b:'HAN 16B',han24b:'HAN 24B',
+  plsrc:'PLOCK SRC',pldrn:'PLOCK DRN',ds9:'DB9 / VGA',ds15:'DA15',ds25:'DB25',ds37:'DC37',toggle:'TOGGLE',pb12:'PB 12',pb16:'PB 16',pb19:'PB 19',pb22:'PB 22',estop22:'E-STOP',
+  led3:'LED',led5:'LED',led5b:'LED',rocker:'ROCKER',fan40:'FAN 40',fan60:'FAN 60',fan80:'FAN 80',fan92:'FAN 92',fan120:'FAN 120',vent12:'VENT',vent6:'VENT'};
+LIB.forEach(d=>{d.short=SHORT[d.id]||(d.id.startsWith('cir')?'CIR '+d.id.slice(3).toUpperCase():undefined);});
 
 /* ============ State ============ */
 const LS='kudos-rack-panel-v1';
@@ -473,6 +482,62 @@ function parseLogoSVG(text,name){
     return {id:'lg_'+uid(),name:name.replace(/\.svg$/i,''),ar:+(bh/bw).toFixed(5),polys,textWarn:!!hasText};
   } finally { host.remove(); }
 }
+// Trace a PNG/JPG logo into outlines: threshold → marching squares → link loops → simplify.
+function rdp(pts,eps){ // iterative Ramer–Douglas–Peucker on an open polyline
+  const n=pts.length; if(n<3) return pts.slice(); const keep=new Uint8Array(n); keep[0]=keep[n-1]=1; const st=[[0,n-1]];
+  while(st.length){const [a,b]=st.pop();const [ax,ay]=pts[a],[bx,by]=pts[b];const dx=bx-ax,dy=by-ay,dl=Math.hypot(dx,dy);let dm=0,id=-1;
+    for(let i=a+1;i<b;i++){const d=dl>1e-9?Math.abs(dy*pts[i][0]-dx*pts[i][1]+bx*ay-by*ax)/dl:Math.hypot(pts[i][0]-ax,pts[i][1]-ay);if(d>dm){dm=d;id=i;}}
+    if(dm>eps&&id>0){keep[id]=1;st.push([a,id],[id,b]);}}
+  return pts.filter((_,i)=>keep[i]);
+}
+async function traceRasterLogo(file){
+  const url=URL.createObjectURL(file);
+  const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('Couldn’t open that image.'));im.src=url;});
+  URL.revokeObjectURL(url);
+  let w=img.naturalWidth,h=img.naturalHeight; if(!w||!h) throw new Error('That image is empty.');
+  const k=Math.min(1600/Math.max(w,h), Math.max(1,900/Math.max(w,h))); w=Math.round(w*k); h=Math.round(h*k);
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h; const cx=cv.getContext('2d',{willReadFrequently:true});
+  cx.imageSmoothingQuality='high'; cx.drawImage(img,0,0,w,h);
+  const px=cx.getImageData(0,0,w,h).data;
+  // decide what counts as "ink": transparent PNGs use alpha, others use darkness (inverted if the logo is light on dark)
+  let transparent=0; for(let i=3;i<px.length;i+=4) if(px[i]<128) transparent++;
+  const useAlpha=transparent>w*h*0.05;
+  const ink=new Uint8Array((w+2)*(h+2)); let inkCount=0;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=(y*w+x)*4,a=px[i+3];let on;
+    if(useAlpha) on=a>=128; else {const l=(0.299*px[i]+0.587*px[i+1]+0.114*px[i+2]); on=a>=128&&l<140;}
+    if(on){ink[(y+1)*(w+2)+x+1]=1;inkCount++;}}
+  if(!useAlpha&&inkCount>w*h*0.55){inkCount=0;for(let y=1;y<=h;y++)for(let x=1;x<=w;x++){const j=y*(w+2)+x;ink[j]=ink[j]?0:1;inkCount+=ink[j];}}
+  if(inkCount<20) throw new Error('Couldn’t find a logo in that image. Try one with a plain background.');
+  const W2=w+2,H2=h+2,V=(x,y)=>ink[y*W2+x];
+  // marching squares; edge midpoints keyed on a doubled integer grid
+  const segs=[]; const T=(x,y)=>[2*x+1,2*y],R=(x,y)=>[2*x+2,2*y+1],B=(x,y)=>[2*x+1,2*y+2],L=(x,y)=>[2*x,2*y+1];
+  for(let y=0;y<H2-1;y++)for(let x=0;x<W2-1;x++){
+    const c=V(x,y)*8+V(x+1,y)*4+V(x+1,y+1)*2+V(x,y+1); if(c===0||c===15) continue;
+    const t=T(x,y),r=R(x,y),b=B(x,y),l=L(x,y);
+    switch(c){case 1:case 14:segs.push([l,b]);break;case 2:case 13:segs.push([b,r]);break;case 3:case 12:segs.push([l,r]);break;
+      case 4:case 11:segs.push([t,r]);break;case 6:case 9:segs.push([t,b]);break;case 7:case 8:segs.push([l,t]);break;
+      case 5:segs.push([t,r],[l,b]);break;case 10:segs.push([l,t],[b,r]);break;}
+  }
+  const key=p=>p[0]*100003+p[1]; const adj=new Map();
+  segs.forEach((s,i)=>{for(const p of s){const kk=key(p);let a=adj.get(kk);if(!a)adj.set(kk,a=[]);a.push(i);}});
+  const used=new Uint8Array(segs.length), loops=[];
+  for(let i=0;i<segs.length;i++){ if(used[i]) continue; used[i]=1;
+    const loop=[segs[i][0],segs[i][1]]; let curP=segs[i][1]; const start=key(segs[i][0]);
+    for(let guard=0;guard<segs.length;guard++){ if(key(curP)===start) break;
+      const nx=(adj.get(key(curP))||[]).find(j=>!used[j]); if(nx==null) break; used[nx]=1;
+      const s=segs[nx]; curP=key(s[0])===key(curP)?s[1]:s[0]; loop.push(curP); }
+    if(loop.length>=4) loops.push(loop.map(([a,b])=>[a/2,b/2]));
+  }
+  // drop specks, simplify, normalise to width 1 with y up
+  const area=l=>{let s=0;for(let i=0;i<l.length;i++){const a=l[i],b=l[(i+1)%l.length];s+=a[0]*b[1]-b[0]*a[1];}return Math.abs(s/2);};
+  const kept=loops.filter(l=>area(l)>Math.max(6,w*h*0.00002)).map(l=>{const s=rdp(l,0.55);return s.length>2?s:l;});
+  if(!kept.length) throw new Error('Couldn’t find a logo in that image. Try one with a plain background.');
+  let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
+  for(const l of kept)for(const [x,y] of l){x1=Math.min(x1,x);x2=Math.max(x2,x);y1=Math.min(y1,y);y2=Math.max(y2,y);}
+  const bw=x2-x1||1,bh=y2-y1||1;
+  const polys=kept.map(l=>{const c=l.concat([l[0]]);return c.flatMap(([x,y])=>[+((x-x1)/bw).toFixed(5),+((y2-y)/bw).toFixed(5)]);});
+  return {id:'lg_'+uid(),name:file.name.replace(/\.(png|jpe?g|webp|gif)$/i,''),ar:+(bh/bw).toFixed(5),polys,traced:true};
+}
 
 /* ============ Checks ============ */
 function checks(p){
@@ -533,7 +598,8 @@ function renderCanvas(){
   const pad=10, vbW=W+pad*2, vbH=H+pad*2;
   svg.setAttribute('viewBox',`${-pad} ${-pad} ${vbW} ${vbH}`);
   const stageW=$('stage').clientWidth-36;
-  svg.style.width=Math.max(320,stageW*zoom)+'px';
+  const svgPx=Math.max(320,stageW*zoom); svg.style.width=svgPx+'px';
+  const pxPerMm=svgPx/vbW;
   svg.style.height='auto';
   const {bad}=checks(p);
   let s=`<defs><linearGradient id="anod" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${fin.b}"/><stop offset=".55" stop-color="${fin.a}"/><stop offset="1" stop-color="${fin.a}"/></linearGradient></defs>`;
@@ -592,12 +658,14 @@ function renderCanvas(){
   // part-name annotations (drawing notes only — never engraved or cut)
   if(showNames){
     for(const it of p.items){ if(it.kind!=='part') continue; const g=geomOf(it,p); if(!g) continue;
-      const fs=Math.max(1.4,Math.min(2.6,Math.min(g.fw,g.fh)*0.09)), maxC=Math.max(4,Math.floor(Math.max(g.fw,24)*0.95/(fs*0.5)));
-      let nm=shortName(g.def); if(nm.length>maxC) nm=nm.slice(0,maxC-1)+'…';
+      // aim for ~13px on screen at any zoom, but never wider or taller than the connector itself
+      let nm=shortName(g.def);
+      const fitW=Math.max(g.fw,10)*0.92/(Math.max(nm.length,3)*0.5), fitH=g.fh*0.8/2.3;
+      const fs=Math.min(13/pxPerMm,fitW,fitH);
       const cy=H-it.y;
       s+=`<g pointer-events="none" font-family="Barlow Condensed, Arial Narrow, sans-serif" text-anchor="middle" fill="var(--accent)" stroke="var(--canvas)" stroke-width="${(fs*0.28).toFixed(2)}" paint-order="stroke" stroke-linejoin="round">
         <text x="${f2(it.x)}" y="${f2(cy-fs*0.55)}" font-size="${fs}" font-weight="700" dominant-baseline="central">${esc(ref.get(it.id))}</text>
-        <text x="${f2(it.x)}" y="${f2(cy+fs*0.6)}" font-size="${(fs*0.85).toFixed(2)}" font-weight="600" dominant-baseline="central">${esc(nm)}</text></g>`;
+        <text x="${f2(it.x)}" y="${f2(cy+fs*0.6)}" font-size="${fs.toFixed(2)}" font-weight="600" dominant-baseline="central">${esc(nm)}</text></g>`;
     }
   }
   if(guide) s+=`<path d="${guide}" stroke="var(--accent)" stroke-width=".25"/>`;
@@ -627,7 +695,7 @@ function renderLib(){
   if(lg.length||!q){
     h+=`<div class="cat">Your logos</div>`;
     for(const l of lg) h+=`<button class="libitem" data-logo="${l.id}" title="Add ${esc(l.name)} to the panel"><svg viewBox="-0.05 -0.05 1.1 ${l.ar+0.1}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="${l.polys.map(f=>{let d='';for(let i=0;i<f.length;i+=2)d+=(i?'L':'M')+f[i]+' '+(l.ar-f[i+1]);return d;}).join('')}" fill="var(--ink)" fill-rule="evenodd"/></svg><span style="min-width:0"><div class="nm">${esc(l.name)}</div><div class="pn">Engraved logo</div></span><span></span></button>`;
-    if(!q) h+=`<button class="libitem" data-upload="1"><svg viewBox="0 0 34 30" aria-hidden="true"><rect x="3" y="3" width="28" height="24" rx="3" fill="none" stroke="var(--muted)" stroke-dasharray="3 2"/><path d="M17 9v12M11 15h12" stroke="var(--accent)" stroke-width="2"/></svg><span style="min-width:0"><div class="nm">Upload logo</div><div class="pn">SVG file, text as outlines</div></span><span></span></button>`;
+    if(!q) h+=`<button class="libitem" data-upload="1"><svg viewBox="0 0 34 30" aria-hidden="true"><rect x="3" y="3" width="28" height="24" rx="3" fill="none" stroke="var(--muted)" stroke-dasharray="3 2"/><path d="M17 9v12M11 15h12" stroke="var(--accent)" stroke-width="2"/></svg><span style="min-width:0"><div class="nm">Upload logo</div><div class="pn">SVG, PNG or JPG</div></span><span></span></button>`;
   }
   for(const c of cats){
     h+=`<div class="cat">${esc(c)}</div>`;
@@ -864,7 +932,15 @@ function addLogo(id){
 $('tLogo').onclick=()=>$('logoIn').click();
 $('logoIn').addEventListener('change',e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
-  if(!/\.svg$/i.test(f.name)&&f.type!=='image/svg+xml'){toast('Logos need to be SVG so they engrave as vectors. Export an SVG from Illustrator or ask your designer.');return;}
+  const isSvg=/\.svg$/i.test(f.name)||f.type==='image/svg+xml';
+  if(!isSvg){
+    if(!/^image\/(png|jpe?g|webp|gif)$/i.test(f.type)&&!/\.(png|jpe?g|webp|gif)$/i.test(f.name)){toast('Use an SVG, PNG or JPG logo. For PDF or Illustrator files, export a PNG or SVG first.');return;}
+    toast('Tracing logo…');
+    traceRasterLogo(f).then(L=>{logos.push(L);persist();renderLib();addLogo(L.id);
+      toast(`Traced ${L.name} into outlines. Check the edges look clean; an SVG gives the sharpest engraving.`);})
+      .catch(err=>toast(err.message||'Couldn’t trace that image.'));
+    return;
+  }
   const r=new FileReader();
   r.onload=()=>{try{const L=parseLogoSVG(String(r.result),f.name);const textWarn=L.textWarn;delete L.textWarn;logos.push(L);persist();renderLib();addLogo(L.id);
       toast(textWarn?'Logo added. Its live text was skipped — convert text to outlines and upload again.':`Added ${L.name} to Your logos`);}
@@ -1022,13 +1098,13 @@ function makePDF(p){
   for(const it of p.items){const cx=X(it.x),cy=Y(it.y);doc.line(cx-1.5,cy,cx+1.5,cy);doc.line(cx,cy-1.5,cx,cy+1.5);}
   doc.setTextColor(200,40,40);
   for(const it of p.items.filter(i=>i.kind==='part')){const g=geomOf(it,p);if(!g)continue;
-    doc.setFont('helvetica','bold');doc.setFontSize(5);doc.text(ref.get(it.id),X(g.bbox.x2)-0.4,Y(g.bbox.y2)+1.8,{align:'right'});
+    doc.setFont('helvetica','bold');doc.setFontSize(6.5);doc.text(ref.get(it.id),X(g.bbox.x2),Y(g.bbox.y2)-0.8,{align:'right'});
     // connector type, centred under the centre mark
-    const wmm=Math.max(g.fw,24)*sc; doc.setFont('helvetica','normal');doc.setFontSize(4.2);
+    const wmm=Math.max(g.fw,24)*sc; doc.setFont('helvetica','bold');doc.setFontSize(6.5);
     let nm=shortName(g.def); while(nm.length>3&&doc.getTextWidth(nm)>wmm) nm=nm.slice(0,-2)+'…';
-    doc.text(nm,X(it.x),Y(it.y)+3.4,{align:'center'});
-    doc.setFontSize(3.6);let pn=g.def.pn;while(pn.length>3&&doc.getTextWidth(pn)>wmm) pn=pn.slice(0,-2)+'…';
-    doc.text(pn,X(it.x),Y(it.y)+5.2,{align:'center'});}
+    doc.text(nm,X(it.x),Y(it.y)+4,{align:'center'});
+    doc.setFont('helvetica','normal');doc.setFontSize(5);let pn=g.def.pn;while(pn.length>3&&doc.getTextWidth(pn)>wmm) pn=pn.slice(0,-2)+'…';
+    doc.text(pn,X(it.x),Y(it.y)+6.3,{align:'center'});}
   doc.setFont('helvetica','normal');
   // ordinate dims — X along the top
   doc.setTextColor(20);doc.setDrawColor(120);doc.setFontSize(6);doc.setLineWidth(0.08);
