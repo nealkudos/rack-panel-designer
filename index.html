@@ -195,6 +195,7 @@ a{color:var(--accent)}
         <button class="btn sm on" id="vCut" title="Show holes as cut">Cutouts</button>
         <button class="btn sm" id="vFit" title="Show connectors fitted">Fitted</button>
         <button class="btn sm on" id="vNames" title="Show each connector's reference and type on the drawing (not engraved)" aria-pressed="true">Part names</button>
+        <label class="row note">Spacing <select id="spMode" aria-label="Spacing measurements"><option value="pitch">Centre to centre</option><option value="gap">Gap between</option><option value="off">Off</option></select></label>
         <span class="sep"></span>
         <label class="row note">Grid <select id="grid" aria-label="Snap grid"><option value="0.1">0.1</option><option value="0.5">0.5</option><option value="1">1</option><option value="2.5">2.5</option><option value="5">5</option></select></label>
         <button class="btn sm" id="zOut" aria-label="Zoom out">−</button>
@@ -347,6 +348,7 @@ let logos=[];   // uploaded logos: {id,name,ar,polys:[[u,v,u,v…]]} normalised 
 let panels=[], cur=0;
 let sel=new Set(), view='cut', zoom=1, libCur=null;
 let showNames=true; try{showNames=localStorage.getItem(LS+'-names')!=='0';}catch(e){}
+let spMode='pitch'; try{spMode=localStorage.getItem(LS+'-sp')||'pitch';}catch(e){}
 let undo=[], redo=[];
 const uid=()=>Math.random().toString(36).slice(2,9);
 const P=()=>panels[cur];
@@ -587,6 +589,18 @@ function shelfGeom(p){
   return {SW,x0,D,lip,side,outline,bends,devs,slots:clear,vents};
 }
 
+/* ============ Spacing ============ */
+// Rows = connectors/devices whose centres share a Y (±1 mm). Spans are between neighbours, left to right.
+function rowsOf(p){
+  const its=p.items.filter(isPL).map(i=>({i,g:geomOf(i,p)})).filter(o=>o.g).sort((a,b)=>a.i.y-b.i.y);
+  const rows=[];for(const o of its){const r=rows.find(r=>Math.abs(r.y-o.i.y)<=1);if(r)r.items.push(o);else rows.push({y:o.i.y,items:[o]});}
+  return rows.filter(r=>r.items.length>1).map(r=>{r.items.sort((a,b)=>a.i.x-b.i.x);
+    const spans=[];for(let k=1;k<r.items.length;k++){const A=r.items[k-1],B=r.items[k];spans.push({A,B,pitch:+(B.i.x-A.i.x).toFixed(2),gap:+(B.g.bbox.x1-A.g.bbox.x2).toFixed(2)});}
+    const stat=key=>{const v=spans.map(s=>s[key]);const cnt={};v.forEach(x=>cnt[x.toFixed(2)]=(cnt[x.toFixed(2)]||0)+1);const mode=+Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0];
+      return {mode,equal:v.every(x=>Math.abs(x-v[0])<=0.05),min:Math.min(...v),max:Math.max(...v)};};
+    return {y:r.y,items:r.items,spans,top:Math.max(...r.items.map(o=>o.g.bbox.y2)),pitch:stat('pitch'),gap:stat('gap')};});
+}
+
 /* ============ Checks ============ */
 function checks(p){
   const W=rackW(p),H=panelH(p),op=opening(p),rl=(W-op)/2,rr=W-rl,out=[],bad=new Set();
@@ -722,6 +736,19 @@ function renderCanvas(){
         <text x="${f2(it.x)}" y="${f2(cy+fs*0.6)}" font-size="${fs.toFixed(2)}" font-weight="600" dominant-baseline="central">${esc(nm)}</text></g>`;
     }
   }
+  // spacing chains above each row
+  if(spMode!=='off'){
+    const fs=11/pxPerMm;
+    for(const r of rowsOf(p)){
+      const st=r[spMode], yc=H-(r.top+1.4);
+      for(const sp of r.spans){
+        const x1=spMode==='pitch'?sp.A.i.x:sp.A.g.bbox.x2, x2=spMode==='pitch'?sp.B.i.x:sp.B.g.bbox.x1, v=sp[spMode];
+        const ok=st.equal||Math.abs(v-st.mode)<=0.05, col=ok?'var(--ok)':'var(--warn)';
+        s+=`<g pointer-events="none" stroke="${col}" stroke-width="${(0.9/pxPerMm).toFixed(3)}"><path d="M${f2(x1)} ${f2(yc)}H${f2(x2)}M${f2(x1)} ${f2(yc-1.2)}v2.4M${f2(x2)} ${f2(yc-1.2)}v2.4"/></g>`;
+        if(Math.abs(x2-x1)>fs*1.2) s+=`<text pointer-events="none" x="${f2((x1+x2)/2)}" y="${f2(yc-fs*0.65)}" font-size="${fs.toFixed(2)}" text-anchor="middle" dominant-baseline="central" font-family="JetBrains Mono, monospace" font-weight="500" fill="${col}" stroke="var(--canvas)" stroke-width="${(fs*0.3).toFixed(2)}" paint-order="stroke">${v.toFixed(1)}</text>`;
+      }
+    }
+  }
   if(guide) s+=`<path d="${guide}" stroke="var(--accent)" stroke-width=".25"/>`;
   // dims hint
   s+=`<text x="${W/2}" y="${H+7}" font-size="3.2" text-anchor="middle" fill="var(--muted)" font-family="JetBrains Mono, monospace">${f2(W)} × ${f2(H)} mm · ${p.U}U · ${p.thick} mm</text>`;
@@ -803,6 +830,13 @@ function renderInspector(){
         <div class="two">${numField('shLip','Rear lip mm',p.shelf.lip,1)}${numField('shSide','Side flanges mm',p.shelf.side,1)}</div>
         <div class="two"><label class="field"><span>Strap slots</span><select id="shStraps"><option value="1"${p.shelf.straps!==false?' selected':''}>Yes, each side</option><option value="0"${p.shelf.straps===false?' selected':''}>No</option></select></label>
         <label class="field"><span>Vent slots</span><select id="shVents"><option value="0"${!p.shelf.vents?' selected':''}>No</option><option value="1"${p.shelf.vents?' selected':''}>Under devices</option></select></label></div></div>`:''}
+      ${(()=>{const rs=rowsOf(p);if(!rs.length)return '';return `<div><h3 style="font-size:15px;margin-bottom:6px">Spacing</h3><div style="display:flex;flex-direction:column;gap:8px">${rs.map((r,ix)=>`<div style="display:flex;flex-direction:column;gap:5px;padding:7px 8px;border-radius:5px;background:${r.pitch.equal?'var(--ok-soft)':'var(--warn-soft)'}">
+          <div class="note" style="color:var(--ink)"><b>Row at Y ${f2(r.y)}</b> · ${r.items.length} items<br>
+          Centres ${r.pitch.equal?`${f2(r.pitch.mode)} — all equal`:`${f2(r.pitch.min)}–${f2(r.pitch.max)} — not equal`}<br>
+          Gaps ${r.gap.equal?`${f2(r.gap.mode)} — all equal`:`${f2(r.gap.min)}–${f2(r.gap.max)}`}</div>
+          <div class="row"><button class="btn sm" data-rowact="eq" data-row="${ix}">Make centres equal</button><button class="btn sm" data-rowact="geq" data-row="${ix}">Make gaps equal</button></div>
+          <div class="row"><input type="number" step="0.5" id="rp${ix}" placeholder="pitch mm" style="width:90px" aria-label="Pitch for row at Y ${f2(r.y)}"><button class="btn sm" data-rowact="pitch" data-row="${ix}">Set pitch</button></div></div>`).join('')}</div>
+          <p class="note" style="margin:6px 0 0">Equal spacing keeps the outer two items where they are. Set pitch centres the row on its current middle.</p></div>`;})()}
       <div><h3 style="font-size:15px;margin-bottom:6px">Checks</h3>${warnHtml(list)}</div>
       <label class="field"><span>Notes for the maker</span><textarea id="pNotes" placeholder="e.g. Engraving infill white. Deburr all holes.">${esc(p.notes||'')}</textarea></label>
       <p class="note" style="margin:0">Positions are measured to each part's centre from the panel's bottom-left corner, viewed from the front. The DXF uses the same origin.</p>`;
@@ -920,6 +954,12 @@ function warnHtml(list,quiet){
   return `<ul class="warnlist">${list.map(w=>`<li class="${w.lvl}">${esc(w.msg)}</li>`).join('')}</ul>`;
 }
 $('insp').addEventListener('click',e=>{
+  const rb=e.target.closest('[data-rowact]');
+  if(rb){const p=P(),r=rowsOf(p)[+rb.dataset.row];if(!r)return;const its=r.items.map(o=>o.i),n=its.length,act=rb.dataset.rowact;
+    if(act==='pitch'){const pt=+$('rp'+rb.dataset.row).value;if(!(pt>0)){toast('Type a pitch in mm first');return;}pushUndo();const mid=(its[0].x+its[n-1].x)/2,x0=mid-pt*(n-1)/2;its.forEach((i,k)=>i.x=+(x0+k*pt).toFixed(2));}
+    else if(act==='eq'){pushUndo();const st=(its[n-1].x-its[0].x)/(n-1);its.forEach((i,k)=>i.x=+(its[0].x+k*st).toFixed(2));}
+    else if(act==='geq'){pushUndo();const ws=r.items.map(o=>o.g.fw);const L=r.items[0].g.bbox.x1,R=r.items[n-1].g.bbox.x2;const gap=(R-L-ws.reduce((a,b)=>a+b,0))/(n-1);let x=L;its.forEach((i,k)=>{i.x=+(x+ws[k]/2).toFixed(2);x+=ws[k]+gap;});}
+    persist();renderAll();toast('Row spacing updated');return;}
   const b=e.target.closest('[data-act]'); if(!b) return; const a=b.dataset.act, p=P();
   const items=p.items.filter(i=>sel.has(i.id)); if(!items.length) return;
   const order=[...sel].map(id=>p.items.find(i=>i.id===id)).filter(Boolean);
@@ -1051,6 +1091,8 @@ $('logoIn').addEventListener('change',e=>{
 $('q').addEventListener('input',renderLib);
 $('vCut').onclick=()=>{view='cut';$('vCut').classList.add('on');$('vFit').classList.remove('on');renderCanvas();};
 $('vFit').onclick=()=>{view='fit';$('vFit').classList.add('on');$('vCut').classList.remove('on');renderCanvas();};
+$('spMode').value=spMode;
+$('spMode').addEventListener('change',e=>{spMode=e.target.value;try{localStorage.setItem(LS+'-sp',spMode);}catch(_){}renderCanvas();});
 const syncNamesBtn=()=>{$('vNames').classList.toggle('on',showNames);$('vNames').setAttribute('aria-pressed',String(showNames));};
 $('vNames').onclick=()=>{showNames=!showNames;try{localStorage.setItem(LS+'-names',showNames?'1':'0');}catch(e){}syncNamesBtn();renderCanvas();};
 syncNamesBtn();
@@ -1247,8 +1289,16 @@ function makePDF(p){
   // extension lines from features to edges (light)
   doc.setDrawColor(225);doc.setLineWidth(0.06);
   for(const it of p.items){doc.line(X(it.x),Y(it.y),X(it.x),top);doc.line(X(it.x),Y(it.y),right,Y(it.y));}
+  // spacing chains (centre to centre) for each row, under the panel
+  const rws=rowsOf(p);
+  rws.forEach((r,k)=>{const cy=Y(0)+6+k*6;doc.setLineWidth(0.1);doc.setFontSize(5.5);
+    for(const sp of r.spans){const ok=r.pitch.equal||Math.abs(sp.pitch-r.pitch.mode)<=0.05;doc.setDrawColor(ok?60:200,ok?60:110,ok?60:20);doc.setTextColor(ok?20:200,ok?20:110,ok?20:20);
+      const x1=X(sp.A.i.x),x2=X(sp.B.i.x);doc.line(x1,cy,x2,cy);doc.line(x1,cy-0.9,x1,cy+0.9);doc.line(x2,cy-0.9,x2,cy+0.9);
+      doc.setDrawColor(215);doc.setLineWidth(0.05);doc.line(x1,Y(sp.A.i.y),x1,cy-0.9);if(sp===r.spans[r.spans.length-1])doc.line(x2,Y(sp.B.i.y),x2,cy-0.9);doc.setLineWidth(0.1);
+      doc.text(f2(sp.pitch),(x1+x2)/2,cy-0.8,{align:'center'});}
+    doc.setTextColor(90);doc.text(`row Y ${f2(r.y)}`,X(r.items[r.items.length-1].i.x)+2,cy+0.6);});
   // overall dims
-  doc.setDrawColor(60);doc.setLineWidth(0.12);const by=Y(0)+8;doc.line(X(0),Y(0)+1,X(0),by+1);doc.line(X(W),Y(0)+1,X(W),by+1);doc.line(X(0),by,X(W),by);
+  doc.setDrawColor(60);doc.setLineWidth(0.12);const by=Y(0)+8+rws.length*6;doc.line(X(0),Y(0)+1,X(0),by+1);doc.line(X(W),Y(0)+1,X(W),by+1);doc.line(X(0),by,X(W),by);
   const arr=(x,y,dir)=>{doc.line(x,y,x+dir*2,y-0.7);doc.line(x,y,x+dir*2,y+0.7);};arr(X(0),by,1);arr(X(W),by,-1);
   doc.setFontSize(8);doc.setTextColor(20);doc.text(f2(W),X(W/2),by-1.2,{align:'center'});
   const lx=X(0)-8;doc.line(X(0)-1,Y(0),lx-1,Y(0));doc.line(X(0)-1,Y(H),lx-1,Y(H));doc.line(lx,Y(0),lx,Y(H));
