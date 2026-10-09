@@ -195,7 +195,8 @@ a{color:var(--accent)}
         <button class="btn sm on" id="vCut" title="Show holes as cut">Cutouts</button>
         <button class="btn sm" id="vFit" title="Show connectors fitted">Fitted</button>
         <button class="btn sm on" id="vNames" title="Show each connector's reference and type on the drawing (not engraved)" aria-pressed="true">Part names</button>
-        <label class="row note">Spacing <select id="spMode" aria-label="Spacing measurements"><option value="pitch">Centre to centre</option><option value="gap">Gap between</option><option value="off">Off</option></select></label>
+        <button class="btn sm" id="vMeas" title="Show spacing measurements between connectors (on screen and on the PDF)" aria-pressed="false">Measurements</button>
+        <select id="spMode" aria-label="What to measure" style="font-size:13px;padding:3px 6px" hidden><option value="pitch">Centre to centre</option><option value="gap">Gap between</option></select>
         <span class="sep"></span>
         <label class="row note">Grid <select id="grid" aria-label="Snap grid"><option value="0.1">0.1</option><option value="0.5">0.5</option><option value="1">1</option><option value="2.5">2.5</option><option value="5">5</option></select></label>
         <button class="btn sm" id="zOut" aria-label="Zoom out">−</button>
@@ -348,7 +349,7 @@ let logos=[];   // uploaded logos: {id,name,ar,polys:[[u,v,u,v…]]} normalised 
 let panels=[], cur=0;
 let sel=new Set(), view='cut', zoom=1, libCur=null;
 let showNames=true; try{showNames=localStorage.getItem(LS+'-names')!=='0';}catch(e){}
-let spMode='pitch'; try{spMode=localStorage.getItem(LS+'-sp')||'pitch';}catch(e){}
+let spMode='pitch', showMeas=false; try{spMode=localStorage.getItem(LS+'-sp')||'pitch';if(spMode==='off')spMode='pitch';showMeas=localStorage.getItem(LS+'-meas')==='1';}catch(e){}
 let undo=[], redo=[];
 const uid=()=>Math.random().toString(36).slice(2,9);
 const P=()=>panels[cur];
@@ -737,7 +738,7 @@ function renderCanvas(){
     }
   }
   // spacing chains above each row
-  if(spMode!=='off'){
+  if(showMeas){
     const fs=11/pxPerMm;
     for(const r of rowsOf(p)){
       const st=r[spMode], yc=H-(r.top+1.4);
@@ -1093,6 +1094,9 @@ $('vCut').onclick=()=>{view='cut';$('vCut').classList.add('on');$('vFit').classL
 $('vFit').onclick=()=>{view='fit';$('vFit').classList.add('on');$('vCut').classList.remove('on');renderCanvas();};
 $('spMode').value=spMode;
 $('spMode').addEventListener('change',e=>{spMode=e.target.value;try{localStorage.setItem(LS+'-sp',spMode);}catch(_){}renderCanvas();});
+const syncMeas=()=>{$('vMeas').classList.toggle('on',showMeas);$('vMeas').setAttribute('aria-pressed',String(showMeas));$('spMode').hidden=!showMeas;};
+$('vMeas').onclick=()=>{showMeas=!showMeas;try{localStorage.setItem(LS+'-meas',showMeas?'1':'0');}catch(_){}syncMeas();renderCanvas();};
+syncMeas();
 const syncNamesBtn=()=>{$('vNames').classList.toggle('on',showNames);$('vNames').setAttribute('aria-pressed',String(showNames));};
 $('vNames').onclick=()=>{showNames=!showNames;try{localStorage.setItem(LS+'-names',showNames?'1':'0');}catch(e){}syncNamesBtn();renderCanvas();};
 syncNamesBtn();
@@ -1290,7 +1294,7 @@ function makePDF(p){
   doc.setDrawColor(225);doc.setLineWidth(0.06);
   for(const it of p.items){doc.line(X(it.x),Y(it.y),X(it.x),top);doc.line(X(it.x),Y(it.y),right,Y(it.y));}
   // spacing chains (centre to centre) for each row, under the panel
-  const rws=rowsOf(p);
+  const rws=showMeas?rowsOf(p):[];
   rws.forEach((r,k)=>{const cy=Y(0)+6+k*6;doc.setLineWidth(0.1);doc.setFontSize(5.5);
     for(const sp of r.spans){const ok=r.pitch.equal||Math.abs(sp.pitch-r.pitch.mode)<=0.05;doc.setDrawColor(ok?60:200,ok?60:110,ok?60:20);doc.setTextColor(ok?20:200,ok?20:110,ok?20:20);
       const x1=X(sp.A.i.x),x2=X(sp.B.i.x);doc.line(x1,cy,x2,cy);doc.line(x1,cy-0.9,x1,cy+0.9);doc.line(x2,cy-0.9,x2,cy+0.9);
