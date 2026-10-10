@@ -264,7 +264,8 @@ a{color:var(--accent)}
   <div class="rk-work rk-only" hidden>
     <aside class="pane lib" aria-label="Rack library">
       <div class="pane-h"><h2>Add to rack</h2></div>
-      <div class="lib-search"><div class="row note">Adding to the <b id="rkSideLbl" style="color:var(--accent)">front</b>. Click the Front or Rear view to switch.</div></div>
+      <div class="lib-search"><input id="rkQ" type="search" placeholder="Search: Focusrite, Mac mini, PDU, ULXD4…" aria-label="Search rack kit">
+        <div class="row note">Adding to the <b id="rkSideLbl" style="color:var(--accent)">front</b>. Click the Front or Rear view to switch.</div></div>
       <div class="lib-list" id="rkLib"></div>
       <div class="lib-foot">
         <details id="rkCustForm"><summary>Custom kit</summary>
@@ -1545,18 +1546,145 @@ const KIT=[
   {g:'Equipment',name:'Wireless receiver',t:'kit',h:1,d:300},{g:'Equipment',name:'Amplifier',t:'kit',h:2,d:450},
   {g:'Equipment',name:'Video switcher / scaler',t:'kit',h:1,d:300},{g:'Equipment',name:'Video processor',t:'kit',h:4,d:500},
   {g:'Equipment',name:'Computer / server',t:'kit',h:2,d:450}];
+// Real units for the rack planner. Sizes in mm (W × H × D). form: rack = full 19", half / third = part-width rack units,
+// desktop = needs a shelf or mount, mount / shelf = holds other units. conf: high = maker's spec, med = retailer, low = estimated.
+// dEst = depth not published, figure assumed.
+const FR='https://focusrite.com', CAN='https://www.canford.co.uk/Products/';
+const PRODUCTS=[
+ // Focusrite RedNet
+ ['Focusrite RedNet','Focusrite','RedNet A16R MkII','A16R MkII','rack',1,482,44,352,'16×16 analogue, AES3, dual Dante','Dual redundant PSU (2× IEC)',CAN+'95-8411','med'],
+ ['Focusrite RedNet','Focusrite','RedNet A8R','A8R','rack',1,482,44,352,'8×8 analogue, AES3, Dante','Discontinued, still common in rental stock','https://www.markertek.com/product/fcsr-rednet-a8r','med'],
+ ['Focusrite RedNet','Focusrite','RedNet D16R MkII','D16R MkII','rack',1,482.6,44.5,263,'16×16 AES3, S/PDIF, Dante','Dual redundant PSU',CAN+'95-8412','med'],
+ ['Focusrite RedNet','Focusrite','RedNet D64R','D64R','rack',1,482.6,44.5,308,'64ch MADI ↔ Dante','Dual redundant PSU',CAN+'95-8413','med'],
+ ['Focusrite RedNet','Focusrite','RedNet HD32R','HD32R','rack',1,482.6,44.5,263,'32ch Pro Tools HD ↔ Dante','Dual redundant PSU','https://www.thomann.co.uk/focusrite_rednet_hd32r.htm','med'],
+ ['Focusrite RedNet','Focusrite','RedNet MP8R','MP8R','rack',1,482.6,44.5,394,'8 remote mic pres, Dante','Deepest 1U RedNet unit',CAN+'95-8415','med'],
+ ['Focusrite RedNet','Focusrite','RedNet X2P','X2P','desktop',null,203.6,60.6,145.7,'2 mic/line in, 2 out, HP, Dante','PoE or 12 V PSU. No Focusrite rack kit — use a 2U shelf',CAN+'95-8417','med'],
+ ['Focusrite RedNet','Focusrite','RedNet AM2','AM2','desktop',null,140,48,107,'Stereo HP + 2 line out, Dante','PoE or 12 V PSU. Size axes not labelled by the retailer — check','https://www.thomann.co.uk/focusrite_rednet_am2.htm','low'],
+ ['Focusrite RedNet','Focusrite','RedNet R1','R1','desktop',null,265,58,135,'Desktop remote, talkback, Dante','PoE or 12 V PSU','https://thomann.co.uk/focusrite_rednet_r1.htm','med'],
+ ['Focusrite RedNet','Focusrite','RedNet TNX','TNX','desktop',null,144,71.6,212.4,'128×128 Thunderbolt 3 ↔ Dante','External PSU','https://www.thomann.co.uk/focusrite_rednet_tnx.htm','med'],
+ ['Focusrite RedNet','Focusrite','RedNet 1 (legacy)','RedNet 1','rack',2,482,88,350,'8×8 analogue line, Dante','Depth not published — 350 mm assumed','https://www.soundonsound.com/node/4903550','low',1],
+ ['Focusrite RedNet','Focusrite','RedNet 2 (legacy)','RedNet 2','rack',2,482,88,350,'16×16 analogue line, Dante','Depth not published — 350 mm assumed','https://www.soundonsound.com/node/4903550','low',1],
+ ['Focusrite RedNet','Focusrite','RedNet 3 (legacy)','RedNet 3','rack',2,482,88,350,'32×32 ADAT/AES/S-PDIF, Dante','Depth not published — 350 mm assumed','https://www.svconline.com/?p=60224','low',1],
+ ['Focusrite RedNet','Focusrite','RedNet 4 (legacy)','RedNet 4','rack',2,482,88,350,'8 remote mic pres, Dante','Depth not published — 350 mm assumed','https://www.svconline.com/?p=60224','low',1],
+ ['Focusrite RedNet','Focusrite','RedNet 5 (legacy)','RedNet 5','rack',2,482,88,350,'32ch Pro Tools HD ↔ Dante','2U and depth assumed — check your unit','https://www.svconline.com/?p=60224','low',1],
+ ['Focusrite RedNet','Focusrite','RedNet 6 (legacy)','RedNet 6','rack',1,482,44,350,'64ch MADI ↔ Dante','Depth not published — 350 mm assumed','https://www.soundonsound.com/node/4903550','low',1],
+ // Focusrite Red & ISA
+ ['Focusrite Red & ISA','Focusrite','Red 4Pre','Red 4Pre','rack',1,483,44,340,'4 pre, 8 line, TB, HD, Dante','Discontinued','https://www.bhphotovideo.com/c/product/1240821-REG/','med'],
+ ['Focusrite Red & ISA','Focusrite','Red 8Pre','Red 8Pre','rack',1,483,44,340,'8 pre, 16 line, TB, HD, Dante','Discontinued','https://www.soundonsound.com/reviews/focusrite-red-8pre','med'],
+ ['Focusrite Red & ISA','Focusrite','Red 8Line','Red 8Line','rack',1,482,44,343,'2 pre, 8 line, TB3, HD, Dante','','https://www.thomann.co.uk/focusrite_red_8_line.htm','med'],
+ ['Focusrite Red & ISA','Focusrite','Red 16Line','Red 16Line','rack',1,483,44,340,'2 pre, 16 line, TB3, HD, Dante','','https://www.thomann.co.uk/focusrite_red_16_line.htm','med'],
+ ['Focusrite Red & ISA','Focusrite','ISA 828 MkII','ISA 828 MkII','rack',2,482,88,325,'8 mic/line, 4 inst, DB25 out','Focusrite says allow 75 mm behind for cables','https://www.canford.co.uk/ProductResources/resources/F/Focusrite/ISA%20828%20Mk2%20User%20Guide%20v1.01%20English%20-%20EN.pdf','high'],
+ ['Focusrite Red & ISA','Focusrite','ISA 428 MkII','ISA 428 MkII','rack',2,482,88,280,'4 mic pre, inst, opt ADC','','https://www.fullcompass.com/prod/175734','med'],
+ ['Focusrite Red & ISA','Focusrite','ISA Two','ISA Two','rack',1,480,44,280,'2 mic pre, 2 inst','','https://www.soundhouse.co.jp/en/products/detail/item/172020','med'],
+ ['Focusrite Red & ISA','Focusrite','ISA One','ISA One','desktop',null,220,104,254,'1 mic pre + DI, HP','Desktop only — needs a 3U shelf. Depth may be 290 with knobs','https://www.soundpure.com/p/focusrite-isa-one-single-channel-mic-predi/31015','low'],
+ // Focusrite Clarett+ & Scarlett
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Clarett+ 8Pre','Clarett+ 8Pre','rack',1,482.5,43.9,291,'8 pre, 10 line out, ADAT, USB-C','','https://www.thomann.co.uk/focusrite_clarett_8pre_524288.htm','med'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Clarett+ OctoPre','Clarett+ OctoPre','rack',1,482,44.5,286,'8 mic pre, 8 line out, ADAT','','https://fael-downloads-prod.focusrite.com/customer/prod/downloads/clarett_octopre_user_guide_v4_-_sv.pdf','high'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Clarett+ 4Pre','Clarett+ 4Pre','desktop',null,222,63.5,192,'4 pre, 4 line in/out, ADAT, MIDI','Desktop — needs a 2U shelf','https://www.thomann.de/be/focusrite_clarett_4pre_b_stock_532791.htm','med'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Clarett+ 2Pre','Clarett+ 2Pre','desktop',null,210,55,161,'2 pre, 4 line out, ADAT in','Desktop — needs a 2U shelf','https://www.thomann.co.uk/focusrite_clarett_2pre_524285.htm','med'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Clarett 8PreX (legacy)','Clarett 8PreX','rack',2,482.5,88,288,'8 pre, 10 out, 2× ADAT, Thunderbolt','','https://fael-downloads-prod.focusrite.com/customer/prod/s3fs-public/downloads/Clarett%208PreX%20User%20Guide%20v2%20English%20-%20EN.pdf','high'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Scarlett 18i20 (4th Gen)','18i20 4th Gen','rack',1,482,46.55,259.7,'8 pre, 10 line out, 2× ADAT, USB-C','Rack ears come in the box',FR+'/products/scarlett-18i20','high'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Scarlett 18i20 (3rd Gen)','18i20 3rd Gen','rack',1,482.6,46.6,259.8,'8 pre, 10 line out, ADAT, USB-C','Rack ears come in the box. Discontinued','https://www.markertek.com/product/ams-scar-18i203g','med'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Scarlett OctoPre','Scarlett OctoPre','rack',1,482,44.5,286,'8 mic pre, 8 line out, ADAT','','https://fael-downloads-prod.focusrite.com/customer/prod/downloads/Scarlett OctoPre User Guide - EN.pdf','high'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Scarlett 18i16 (4th Gen)','18i16 4th Gen','desktop',null,240,60.5,169.4,'4 pre, 4 line out, ADAT, S/PDIF','Desktop — needs a 2U shelf',FR+'/products/scarlett-18i16','high'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Scarlett 16i16 (4th Gen)','16i16 4th Gen','desktop',null,220,60.5,155.2,'2 pre, 4 line out, ADAT, MIDI','Desktop — needs a 2U shelf',FR+'/products/scarlett-16i16','high'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Scarlett 4i4 (4th Gen)','4i4 4th Gen','desktop',null,180,60,130,'2 pre, 4 line out, MIDI','Desktop — needs a 2U shelf',FR+'/products/scarlett-4i4','high'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Scarlett 2i2 (4th Gen)','2i2 4th Gen','desktop',null,180,47.5,117,'2 mic/inst in, 2 line out','Desktop — needs a 2U shelf',FR+'/products/scarlett-2i2','high'],
+ ['Focusrite Clarett+ & Scarlett','Focusrite','Scarlett Solo (4th Gen)','Solo 4th Gen','desktop',null,143,46.5,96,'1 mic, 1 inst, 2 line out','Desktop — needs a 2U shelf',FR+'/products/scarlett-solo','high'],
+ // Apple
+ ['Apple','Apple','Mac mini (M4, 2024)','Mac mini M4','desktop',null,127,50,127,'C7 mains in, TB/USB-C, HDMI','50 mm tall — too tall for a true 1U mount. Same size as the 2026 models','https://www.apple.com/uk/mac-mini/specs/','high'],
+ ['Apple','Apple','Mac mini (M1/M2, 2020–2023)','Mac mini M2','desktop',null,197,35.8,197,'C7 mains in, TB, HDMI','Fits the older 1U mounts','https://support.apple.com/en-gb/docs/mac','high'],
+ ['Apple','Apple','Mac Studio','Mac Studio','desktop',null,197,95,197,'Mains in, TB, HDMI, 10GbE','Same chassis for every generation','https://www.apple.com/uk/mac-studio/specs/','high'],
+ ['Apple','Apple','Apple TV 4K','Apple TV 4K','desktop',null,93,31,93,'HDMI out, GbE, fig-8 mains','','https://www.apple.com/uk/apple-tv-4k/specs/','high'],
+ // Mounts & shelves
+ ['Mounts & shelves','Sonnet','RackMac mini (2024+)','RACK-MIN-3X','mount',2,483,88,132,'Holds 1–3× Mac mini M4','Front power buttons. Space under each mini for an SSD','https://www.neweggbusiness.com/sonnet-rack-min-3x/p/9B-0RC-006F-00008','med',0,3],
+ ['Mounts & shelves','MyElectronics','Mac mini 2024 rack mount (1.25U)','19i1.25URM3MM','mount',2,483,55,135,'Holds 1–3× Mac mini M4','1.25U — planned here as 2U. Optional front I/O panel','https://www.myelectronics.nl/us/19-inch-125u-rack-mount-for-3x-mac-mini-2024.html','high',0,3],
+ ['Mounts & shelves','Rackmount.IT','RM-AP-T2','RM-AP-T2','mount',2,483,58.7,217,'Holds 2× Mac mini M4','1.3U — planned here as 2U','https://www.pbtech.com/product/RACRKT06507056/RackmountIT-RM-AP-T2-Rackmount-2x-Apple-Mac-Mini-M','med',0,2],
+ ['Mounts & shelves','RackSolutions','3U shelf for 6× Mac mini M4','107-9097','mount',3,483,133,284,'Holds 6× Mac mini M4','2- or 4-post racks','https://www.racksolutions.com/3u-2post-cantilever-shelf-for-6-apple-mac-mini-m4-2024.html','high',0,3],
+ ['Mounts & shelves','Sonnet','RackMac mini (2018–2023)','RACK-MIN-2XA','mount',1,483,44,200,'Holds 2× Mac mini M1/M2','Does NOT fit the M4 mini. Depth not published — 200 assumed','https://www.fullcompass.com/prod/560236-sonnet-rackmac-mini-1u-rack-kit-for-2-mac-minis-supports-2018-version','med',1,2],
+ ['Mounts & shelves','Sonnet','RackMac Studio','RACK-STD-2X','mount',3,483,133,240,'Holds 1–2× Mac Studio','','https://www.hhb.co.uk/prod/sonnet/rackmac-studio/','med',0,2],
+ ['Mounts & shelves','MyElectronics','Mac Studio rack mount','19i3URM2MS','mount',3,483,132.5,214,'Holds 1–2× Mac Studio (or Studio + mini)','','https://www.myelectronics.nl/us/mac-studio-empower-station-rack-mount-19-inch.html','high',0,2],
+ ['Mounts & shelves','Sonnet','xMac Studio','XMAC-STD-0 / -I / -III','mount',3,480,133,419,'1× Mac Studio + PCIe slots','Rails suit 16–24 in deep racks','https://www.productiongear.co.uk/sonnet-xmac-std-0-xmac-studio-/-no-module.html','med',0,1],
+ ['Mounts & shelves','Penn Elcom','2U rack shelf','R1194/2UK','shelf',2,482,88.9,368,'Holds 2 desktop units side by side (≈430 mm)','Strap or velcro units down. Sliding: R1194/2UK-SL','https://www.markertek.com/product/us2/penn-elcom-r1194-2uk-2ru-19-inch-utility-rack-shelf-14-5-inches-deep-48-5lb-load-capacity','med'],
+ ['Mounts & shelves','Penn Elcom','3U vented rack shelf','3U vented 368 mm','shelf',3,482,133,368,'Tall desktop units (ISA One, Mac Studio)','Part number not confirmed','https://stonegroup.co.uk/penn-elcom-rack-shelf-vented-368-2mm-14-5-deep-3u-1tnetnhs-036451','low'],
+ ['Mounts & shelves','Penn Elcom','1U rack shelf','R1194/1UK','shelf',1,482,44.5,270.5,'Units under ~40 mm tall only','15 kg load','https://www.simplysoundandlighting.co.uk/products/penn-elcom-1u-19-rack-mount-shelf-black-r1194-1uk','med'],
+ ['Mounts & shelves','Penn Elcom','1U half-width shelf','R1194-905/1UK','shelfhalf',1,241.3,44.5,280,'Half-width, units under ~40 mm tall','Vented: R1194-905/1UVK','https://www.penn-elcom.com/cn/1u-half-rack-shelf-280mm-deep-r1194-905-1uk','high'],
+ ['Mounts & shelves','Penn Elcom','1U sliding rack tray','R1290/1U','shelf',1,482.6,44,380,'Sliding tray, universal fixing points','560 mm version: R1290-600-1UK','https://export.farnell.com/penn-elcom/r1290-1u/1u-sliding-rack-tray/dp/3371467','med'],
+ ['Mounts & shelves','Adam Hall','1U rack tray, extra deep','87551','shelf',1,483,44,400,'Devices up to 375 mm deep','External depth not published — 400 assumed','https://preview.rockshop.dev.ahorn.io/en/adam-hall-87551-rack-tray-1-u','med',1],
+ ['Mounts & shelves','Adam Hall','1U rack drawer','87401','shelf',1,483,44,400,'Drawer, inside 406 × 36 × 359','External depth not published — 400 assumed','https://www.huss-licht-ton.de/product_info.php/en/Adam-Hall-874-E-01-A-Rack-Drawer/info/39819.html','med',1],
+ ['Mounts & shelves','Adam Hall','2U rack drawer','87402','shelf',2,483,88,400,'Drawer','External depth not published — 400 assumed','https://www.huss-licht-ton.de/product_info.php/en/Adam-Hall-874-E-01-A-Rack-Drawer/info/39819.html','low',1],
+ ['Mounts & shelves','Blackmagic Design','Teranex Mini Rack Shelf','CONVNTRM/YA/RSU','mount',1,483,44,200,'Holds 3× 1/3-rack units','Depth not published — 200 assumed','https://www.markertek.com/product/bmd-convntrmyars/blackmagic-design-teranex-mini-universal-rack-shelf','med',1,3],
+ // Power
+ ['Power distribution','Penn Elcom','2U PDU, 8× UK + TRUE1 TOP','PDU16-UKTR1','rack',2,483,88,140,'8× UK 13A, TRUE1 TOP in + thru, 2× breakers','Dimension axes unlabelled — confirm depth','https://stagesupply.co.uk/?p=46079','low'],
+ ['Power distribution','Penn Elcom','2U PDU, 8× UK, 32A in','PDU16-UK32','rack',2,483,88,150,'8× UK 13A, 32A in','Depth not published — 150 assumed','https://stagesupply.co.uk/?p=154263','med',1],
+ ['Power distribution','Penn Elcom','Slimline PDU, 10× C13','PDU16-10DJ-UK','rack',1,483,44,100,'10× C13 switched, C20 in','Depth not published — 100 assumed','https://www.livedesignonline.com/news/penn-launches-new-range-slimline-power-distribution-units','med',1],
+ ['Power distribution','Penn Elcom','1U panel, 5× TRUE1','R1268-1UK-05TRF','rack',1,483,44,60,'TRUE1 in + 4× TRUE1 out','Loaded panel, no breakers. Depth assumed 60','https://translations.penn-elcom.com/us/1u-rack-panel-filled-with-5-x-powercon-true1-chassis-connectors-r1268-1uk-05trf','high',1],
+ ['Power distribution','Cablenet','8-way UK PDU, C20 feed','PDU8HC20','rack',1,483,44,60,'8× UK 13A, C20 feed (3 m)','Depth not published — 60 assumed','https://store.datek.co.uk/cablenet-8-way-uk-horizontal-1u-pdu-with-iec-c20-3m-feed-pdu8hc20','med',1],
+ ['Power distribution','Rigport','Rackport 16T1','Rackport 16T1','rack',1,485,44,165,'16A CEE in, 9× TRUE1 out','','https://www.huss-licht-ton.de/product_info.php/en/Rigport-Rackport-16T1-power-distributor/info/60316.html','med'],
+ ['Power distribution','Contrik','Power Rack Xtreme','CPR16-C2-T6F1-CB','rack',2,483,88,150,'16A CEE in, 6× TRUE1 + Schuko, breakers','Depth not published — 150 assumed','https://www.huss-licht-ton.de/product_info.php/Contrik-Power-Rack-Xtreme-CPR16-C2-T6F1-CB-Stromverteiler/info/49276.html','med',1],
+ ['Power distribution','Furman','PL-8C E power conditioner','PL-8C E','rack',1,482.6,44.5,266.7,'10 rear + 1 front outlet, IEC in','230 V, 10 A','https://furmanpower.com/products/pl-8c-e','high'],
+ ['Power distribution','APC','Rack PDU Basic 1U 16A','AP9559','rack',1,483,44,57,'10× C13 + 2× C19, C20 in','','https://apcguard.com/ap9559.asp','high'],
+ ['Power distribution','APC','Rack PDU Switched 1U','AP7920B','rack',1,483,44,108,'8× C13 switched, C14 in, network','','https://apcguard.com/ap7920b.asp','high'],
+ ['Power distribution','CyberPower','Basic PDU 8× C13','PDU20BHVIEC8R','rack',1,483,44,38,'8× C13, C20 in (3 m)','','https://www.cyberpowersystems.com/product/pdu/basic-pdus/pdu20bhviec8r/','high'],
+ ['Power distribution','Adam Hall','1U power strip, 8× Schuko','87471','rack',1,485,44,54,'8× Schuko, CEE 7/7 plug','Schuko, not UK sockets','https://www.simplysoundandlighting.co.uk/products/adam-hall-87471-19-1u-mains-power-strip-with-8-sockets','med'],
+ // Wireless
+ ['Wireless','Shure','ULXD4 receiver','ULXD4','half',1,197,42,171,'2× BNC ant, XLR + jack out, RJ45','Rack hardware included. External PSU','https://www.fullcompass.com/prod/253823-shure-ulxd4-h50-digital-wireless-receiver','med'],
+ ['Wireless','Shure','QLXD4 receiver','QLXD4','half',1,197,41,151,'2× BNC ant, XLR + jack out, RJ45','External PSU','https://www.fullcompass.com/prod/657359-shure-qlxd4-restock-item-digital-wireless-receiver','med'],
+ ['Wireless','Shure','SLXD4 receiver','SLXD4E','half',1,197,42,152,'2× BNC ant, XLR + jack out','19" kit included','https://www.thomann.de/be/shure_slxd4e_k59.htm','med'],
+ ['Wireless','Sennheiser','EW-DX EM 2 receiver','EW-DX EM 2','half',1,212,44,189,'2 ch, 2× BNC, 2× XLR, RJ45 PoE','GA 3 rack set included','https://www.sennheiser.com/globalassets/digizuite/40808-en-ew-dx_em2_product_specification_v1.4_en.pdf','high'],
+ ['Wireless','Sennheiser','EM 100 G4 receiver','EM 100 G4','half',1,190,43,212,'1 ch, 2× BNC, XLR + jack out','External PSU','https://www.sennheiser.com/en-de/catalog/products/wireless-systems/em-100-g4/em-100-g4-e-509944','high'],
+ // Network & video
+ ['Network & video','Netgear','M4250-9G1F-PoE+ (half width)','GSM4210PD','half',1,210,40,140,'8× 1G PoE+, 1× 1G, 1× SFP','External PSU. Needs a shelf or rack kit','https://www.netgear.com/hk-zh/business/wired/switches/fully-managed/gsm4210pd/','high'],
+ ['Network & video','Netgear','M4250-10G2F-PoE+','GSM4212P','rack',1,440,43.2,200,'8× 1G PoE+, 2× 1G, 2× SFP','Internal PSU','https://fleetnetwork.ca/products/gsm4212p-100nas','med'],
+ ['Network & video','Blackmagic Design','Teranex Mini converter','Teranex Mini','third',1,140,44.5,170,'SDI/HDMI converter','Goes in the Teranex Mini Rack Shelf','https://fullcompass.com/prod/282635-blackmagic-design-teranex-mini-sdi-to-hdmi-12g-converter','med'],
+ ['Network & video','Blackmagic Design','HyperDeck Studio HD Mini','HYPERD/ST/DAHM','third',1,140,44,177,'SDI/HDMI recorder','1/3 rack × 1U','https://www.bhphotovideo.com/c/product/803492245-USE/blackmagic_design_hyperd_st_dahm_hyperdeck_studio_hd_mini.html','med'],
+ ['Network & video','Blackmagic Design','Web Presenter HD','Web Presenter HD','third',1,140,44,170,'12G-SDI in, USB, Ethernet','Size assumed same as Teranex Mini','https://www.markertek.com/product/bmd-convntrmyars/blackmagic-design-teranex-mini-universal-rack-shelf','low',1],
+ ['Network & video','Blackmagic Design','ATEM Mini Extreme','SWATEMMINICEXT','desktop',null,370,39.6,136.6,'8× HDMI in, 2× HDMI out, USB-C','Desktop switcher — needs a shelf','https://wiltronics.com.au/?p=65073','med'],
+];
+
+const RIW=RW-2*RAIL; // usable width between the rails, for half / third width units
+const CARRIER=t=>t==='mount'||t==='shelf';
+function prodItem(row){
+  const [g,brand,name,part,form,u,wmm,hmm,dmm,io,note,src,conf,dEst,holds]=row;
+  let t='kit',w=1;
+  if(form==='half')w=0.5; else if(form==='third')w=1/3;
+  else if(form==='desktop'){t='desktop';w=wmm<=150?1/3:wmm<=225?0.5:1;}
+  else if(form==='mount')t='mount'; else if(form==='shelf')t='shelf'; else if(form==='shelfhalf'){t='shelf';w=0.5;}
+  const h=u||Math.max(1,Math.ceil((hmm+1)/RU));
+  return {t,name,brand,part,h,w,pos:0,d:dmm,wmm,hmm,io,pnote:note,src,conf,dEst:!!dEst,holds:holds||0};
+}
+function rkW(it){return it.t==='panel'?1:(it.w||1);}
+function rkX(it){const w=rkW(it);if(w>=1)return [0,RW];const sw=w*RIW,x=RAIL+(it.pos||0)*sw;return [x,x+sw];}
+function rkSlots(it){return Math.max(1,Math.round(1/rkW(it)));}
 function rkPanelOf(it){return panels.find(p=>p.id===it.panelId);}
 function rkH(it){const p=it.t==='panel'?rkPanelOf(it):null;return p?p.U:Math.max(1,it.h|0);}
 function rkName(it){if(it.t==='panel'){const p=rkPanelOf(it);return p?p.name:'(deleted panel)';}return it.name||'Item';}
 function rkPushUndo(){rkUndoS.push(JSON.stringify(RK()));if(rkUndoS.length>60)rkUndoS.shift();rkRedoS=[];}
 function rkUndo(){if(!rkUndoS.length)return;rkRedoS.push(JSON.stringify(RK()));racks[curRack]=JSON.parse(rkUndoS.pop());persist();renderRack();}
 function rkRedo(){if(!rkRedoS.length)return;rkUndoS.push(JSON.stringify(RK()));racks[curRack]=JSON.parse(rkRedoS.pop());persist();renderRack();}
+function rkOverlapU(A,B){return A.u<B.u+rkH(B)&&B.u<A.u+rkH(A);}
+function rkOverlapX(A,B){const [a1,a2]=rkX(A),[b1,b2]=rkX(B);return a1<b2-0.5&&b1<a2-0.5;}
+function rkInside(C,D){const [c1,c2]=rkX(C),[d1,d2]=rkX(D);return C.u<=D.u&&C.u+rkH(C)>=D.u+rkH(D)&&c1<=d1+0.5&&c2>=d2-0.5&&(D.t==='desktop'||(rkW(D)<1&&D.t==='kit'));}
+// Two items clash if they share space on the same side — except a desktop or part-width unit sitting inside a shelf or mount.
+function rkClash(A,B){if(A.side!==B.side||!rkOverlapU(A,B)||!rkOverlapX(A,B))return false;
+  if(CARRIER(A.t)&&!CARRIER(B.t))return !rkInside(A,B); if(CARRIER(B.t)&&!CARRIER(A.t))return !rkInside(B,A); return true;}
+function rkCarrierOf(rk,it){if(CARRIER(it.t))return null;return rk.items.find(c=>c!==it&&CARRIER(c.t)&&c.side===it.side&&rkInside(c,it))||null;}
 function rkOccupied(rk,side,skipId){const occ=new Array(rk.U+2).fill(null);for(const it of rk.items){if(it.side!==side||it.id===skipId)continue;for(let u=it.u;u<it.u+rkH(it);u++)if(u>=1&&u<=rk.U)occ[u]=it;}return occ;}
 function rkFreeSlot(rk,side,h){const occ=rkOccupied(rk,side);for(let top=rk.U;top>=h;top--){let ok=true;for(let u=top-h+1;u<=top;u++)if(occ[u]){ok=false;break;}if(ok)return top-h+1;}return null;}
+function rkPlace(rk,it){ // find u/pos for a new item: units that need a holder go into a free shelf/mount slot first
+  const h=rkH(it),n=rkSlots(it),fits=c=>!rk.items.some(o=>o!==c&&(CARRIER(c.t)?(o.side===c.side&&rkOverlapU(o,c)&&rkOverlapX(o,c)):rkClash(o,c))); // a new holder needs empty space
+  if(!CARRIER(it.t)&&it.t!=='panel'){
+    const cars=rk.items.filter(c=>CARRIER(c.t)&&c.side===it.side).sort((a,b)=>b.u-a.u);
+    for(const c of cars){for(let u=c.u+rkH(c)-h;u>=c.u;u--)for(let p=0;p<n;p++){const cand=Object.assign({},it,{u,pos:p});if(rkCarrierOf(rk,cand)===c&&fits(cand))return {u,pos:p};}}
+  }
+  for(let top=rk.U;top>=h;top--)for(let p=0;p<n;p++){const cand=Object.assign({},it,{u:top-h+1,pos:p});if(fits(cand))return {u:top-h+1,pos:p};}
+  return null;
+}
 function rkAdd(item){
-  const rk=RK(),h=item.t==='panel'?(rkPanelOf(item)?.U||1):item.h, u=rkFreeSlot(rk,item.side,h);
-  if(u==null){toast(`No ${h}U space left on the ${item.side}. Make the rack taller or move something.`);return;}
-  rkPushUndo();const it=Object.assign({id:uid(),notes:''},item,{u});rk.items.push(it);rkSel=it.id;persist();renderRack();
+  const rk=RK(),h=item.t==='panel'?(rkPanelOf(item)?.U||1):item.h, spot=rkPlace(rk,Object.assign({id:'_new'},item));
+  if(!spot){toast(`No ${h}U space left on the ${item.side}. Make the rack taller or move something.`);return;}
+  rkPushUndo();const it=Object.assign({id:uid(),notes:''},item,spot);rk.items.push(it);rkSel=it.id;persist();renderRack();
+  if(it.t==='desktop'&&!rkCarrierOf(rk,it))toast(`${rkName(it)} is a desktop unit — add a shelf or mount around it.`);
 }
 function rkChecks(rk){
   const out=[],bad=new Set();
@@ -1565,12 +1693,18 @@ function rkChecks(rk){
     for(const it of its){const h=rkH(it);
       if(it.u<1||it.u+h-1>rk.U){out.push({lvl:'bad',id:it.id,msg:`${rkName(it)} (${side}) sits outside the rack — it needs U${it.u} to U${it.u+h-1}.`});bad.add(it.id);}}
     for(let a=0;a<its.length;a++)for(let b=a+1;b<its.length;b++){const A=its[a],B=its[b];
-      if(A.u<B.u+rkH(B)&&B.u<A.u+rkH(A)){out.push({lvl:'bad',id:B.id,msg:`${rkName(A)} and ${rkName(B)} overlap on the ${side}.`});bad.add(A.id);bad.add(B.id);}}
+      if(rkClash(A,B)){out.push({lvl:'bad',id:B.id,msg:`${rkName(A)} and ${rkName(B)} overlap on the ${side}.`});bad.add(A.id);bad.add(B.id);}}
+    for(const it of its){
+      if(it.t==='desktop'&&!rkCarrierOf(rk,it)){out.push({lvl:'bad',id:it.id,msg:`${rkName(it)} is a desktop unit with nothing holding it — put it on a shelf or in a mount.`});bad.add(it.id);}
+      const c=rkCarrierOf(rk,it); if(c&&(+it.d||0)>(+c.d||0)+20&&c.d) out.push({lvl:'warn',id:it.id,msg:`${rkName(it)} (${it.d} mm) is deeper than ${rkName(c)} (${c.d} mm).`});
+      if(CARRIER(it.t)&&it.holds){const n=its.filter(o=>rkCarrierOf(rk,o)===it).length;if(n>it.holds)out.push({lvl:'warn',id:it.id,msg:`${rkName(it)} holds ${it.holds}, but ${n} units are placed in it.`});}
+      if(it.dEst) out.push({lvl:'warn',id:it.id,msg:`${rkName(it)}: depth not published — ${it.d} mm assumed. Measure before relying on it.`});
+    }
   }
   for(const it of rk.items) if((+it.d||0)>rk.depth){out.push({lvl:'bad',id:it.id,msg:`${rkName(it)} is ${it.d} mm deep — deeper than the ${rk.depth} mm rack.`});bad.add(it.id);}
   // front + rear depth at the same height
   const f=rk.items.filter(i=>i.side==='front'),r=rk.items.filter(i=>i.side==='rear');
-  for(const A of f)for(const B of r){ if(A.u<B.u+rkH(B)&&B.u<A.u+rkH(A)){const sum=(+A.d||0)+(+B.d||0);
+  for(const A of f)for(const B of r){ if(rkOverlapU(A,B)&&rkOverlapX(Object.assign({},A,{side:'x'}),Object.assign({},B,{side:'x'}))){const sum=(+A.d||0)+(+B.d||0);
     if(sum>rk.depth){out.push({lvl:'bad',id:B.id,msg:`${rkName(A)} (front, ${A.d} mm) and ${rkName(B)} (rear, ${B.d} mm) need ${sum} mm — the rack is ${rk.depth} mm deep.`});bad.add(A.id);bad.add(B.id);}
     else if(rk.depth-sum<30) out.push({lvl:'warn',id:B.id,msg:`${rkName(A)} and ${rkName(B)} leave only ${rk.depth-sum} mm for cables between them.`});}}
   if(rk.rails==='front'){for(const it of rk.items.filter(i=>i.side==='rear'))out.push({lvl:'warn',id:it.id,msg:`${rkName(it)} is on the rear but this rack has front rails only.`});
@@ -1597,8 +1731,24 @@ function panelFaceSvg(p){
   }
   return s;
 }
-function kitFaceSvg(it,h){
-  const H=h*RU-0.8; const nm=esc(rkName(it));
+function kitFaceSvg(it,h,W0){
+  W0=W0||RW; const H=h*RU-0.8; const nm=esc(rkName(it)); const full=W0>=RW-1;
+  if(CARRIER(it.t)&&!(it.t==='shelf'&&it.name?.includes('drawer'))){ // holder: show the frame, units drawn on top
+    let s=`<rect x="0" y="0" width="${f2(W0)}" height="${f2(H)}" fill="#141619" stroke="#3a3f45" stroke-width="1"/>`;
+    s+=`<rect x="${full?RAIL:2}" y="${f2(H-3)}" width="${f2(W0-(full?2*RAIL:4))}" height="3" fill="#565c63"/>`;
+    if(full)for(let k=0;k<h;k++){const b=k*RU-0.4;for(const yy of [b+6.35,b+38.1])for(const x of [8.75,RW-8.75])s+=`<rect x="${f2(x-5)}" y="${f2(H-yy-3.25)}" width="10" height="6.5" rx="3.25" fill="#0b0c0e"/>`;}
+    s+=`<text x="${full?RAIL+4:4}" y="9" font-size="8" fill="#8b939e" font-family="Barlow Condensed, Arial Narrow, sans-serif">${nm}${it.holds?` · holds ${it.holds}`:''}</text>`;
+    return s;
+  }
+  if(!full||it.t==='desktop'){ // part-width or desktop unit: draw its real front at true size inside its slot
+    const bw=Math.min(W0-2,it.wmm||W0-2), bh=Math.min(H,it.hmm||H), bx=(W0-bw)/2, by=H-bh;
+    let s=`<rect x="${f2(bx)}" y="${f2(by)}" width="${f2(bw)}" height="${f2(bh)}" rx="2" fill="#2c3036" stroke="#0c0d0f" stroke-width=".6"/>`;
+    s+=`<circle cx="${f2(bx+6)}" cy="${f2(by+6)}" r="1.4" fill="#4cc38a"/>`;
+    const fs=Math.max(5,Math.min(11,bh*0.26,bw/(Math.max(rkName(it).length,6)*0.55)));
+    s+=`<text x="${f2(bx+bw/2)}" y="${f2(by+bh/2-fs*0.45)}" font-size="${f2(fs)}" text-anchor="middle" dominant-baseline="central" fill="#e3e7eb" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="600">${nm}</text>`;
+    s+=`<text x="${f2(bx+bw/2)}" y="${f2(by+bh/2+fs*0.7)}" font-size="${f2(fs*0.7)}" text-anchor="middle" dominant-baseline="central" fill="#9aa3ad" font-family="Barlow Condensed, Arial Narrow, sans-serif">${esc(it.brand||'')} · ${+it.d||0} mm</text>`;
+    return s;
+  }
   const face={kit:'#2c3036',shelf:'#3a3f45',blank:'#1d1f22',vent:'#1d1f22',brush:'#1d1f22'}[it.t]||'#2c3036';
   let s=`<rect x="0" y="0" width="${RW}" height="${f2(H)}" fill="${face}" stroke="#0c0d0f" stroke-width=".5"/>`;
   for(let k=0;k<h;k++){const b=k*RU-0.4;for(const yy of [b+6.35,b+38.1])for(const x of [8.75,RW-8.75])s+=`<rect x="${f2(x-5)}" y="${f2(H-yy-3.25)}" width="10" height="6.5" rx="3.25" fill="#0b0c0e"/>`;}
@@ -1608,7 +1758,8 @@ function kitFaceSvg(it,h){
   if(it.t!=='blank'||it.name!=='Blank panel'){
     const fs=Math.min(14,H*0.32);
     s+=`<text x="${RW/2}" y="${f2(H/2-(it.t==='kit'||it.t==='shelf'?fs*0.35:0))}" font-size="${f2(fs)}" text-anchor="middle" dominant-baseline="central" fill="#e3e7eb" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="600">${nm}</text>`;
-    if((it.t==='kit'||it.t==='shelf')&&H>20)s+=`<text x="${RW/2}" y="${f2(H/2+fs*0.75)}" font-size="${f2(fs*0.6)}" text-anchor="middle" dominant-baseline="central" fill="#9aa3ad" font-family="JetBrains Mono, monospace">${h}U · ${+it.d||0} mm deep</text>`;
+    if((it.t==='kit'||it.t==='shelf')&&H>20)s+=`<text x="${RW/2}" y="${f2(H/2+fs*0.75)}" font-size="${f2(fs*0.6)}" text-anchor="middle" dominant-baseline="central" fill="#9aa3ad" font-family="JetBrains Mono, monospace">${it.brand?esc(it.brand)+' · ':''}${h}U · ${+it.d||0} mm deep</text>`;
+    if(it.brand)s+=`<circle cx="${RAIL+10}" cy="${f2(H/2)}" r="1.8" fill="#4cc38a"/>`;
   }
   return s;
 }
@@ -1623,17 +1774,20 @@ function renderElev(side){
     s+=`<path d="M${RAIL} ${f2(RH-u*RU)}H${RW-RAIL}" stroke="#1d2024" stroke-width=".6"/>`;}
   // ghosts: kit on the other side, seen through empty slots
   const other=side==='front'?'rear':'front';
-  for(const it of rk.items.filter(i=>i.side===other)){const h=rkH(it),y=RH-(it.u+h-1)*RU;
-    s+=`<g opacity=".55"><rect x="${RAIL+4}" y="${f2(y+2)}" width="${RW-2*RAIL-8}" height="${f2(h*RU-4)}" fill="none" stroke="#6c7480" stroke-width="1" stroke-dasharray="5 4"/><text x="${RW/2}" y="${f2(y+h*RU/2)}" font-size="10" text-anchor="middle" dominant-baseline="central" fill="#8b939e" font-family="Barlow Condensed, Arial Narrow, sans-serif">${esc(rkName(it))} — ${other} (${+it.d||0} mm)</text></g>`;}
+  for(const it of rk.items.filter(i=>i.side===other&&!CARRIER(i.t))){const h=rkH(it),y=RH-(it.u+h-1)*RU;let [x1,x2]=rkX(it);[x1,x2]=[RW-x2,RW-x1];x1=Math.max(x1,RAIL+4);x2=Math.min(x2,RW-RAIL-4); // mirrored: seen from the other side
+    s+=`<g opacity=".55"><rect x="${f2(x1)}" y="${f2(y+2)}" width="${f2(x2-x1)}" height="${f2(h*RU-4)}" fill="none" stroke="#6c7480" stroke-width="1" stroke-dasharray="5 4"/><text x="${f2((x1+x2)/2)}" y="${f2(y+h*RU/2)}" font-size="${x2-x1<200?8:10}" text-anchor="middle" dominant-baseline="central" fill="#8b939e" font-family="Barlow Condensed, Arial Narrow, sans-serif">${esc(rkName(it))} — ${other}</text></g>`;}
   // items on this side
-  for(const it of rk.items.filter(i=>i.side===side)){
-    const h=rkH(it),y=RH-(it.u+h-1)*RU+0.4;
+  const mine=rk.items.filter(i=>i.side===side).sort((a,b)=>(CARRIER(b.t)?1:0)-(CARRIER(a.t)?1:0)); // holders first, units on top
+  for(const it of mine){
+    const h=rkH(it),y=RH-(it.u+h-1)*RU+0.4,[x1,x2]=rkX(it),Wd=x2-x1;
     if(it.t==='panel'){const p=rkPanelOf(it);if(p){const W=rackW(p);s+=`<g transform="translate(${f2((RW-W)/2)},${f2(y)})">${panelFaceSvg(p)}</g>`;}}
-    else s+=`<g transform="translate(0,${f2(y)})">${kitFaceSvg(it,h)}</g>`;
-    const H=h*RU-0.8;
-    if(bad.has(it.id)) s+=`<rect x="-3" y="${f2(y-1)}" width="${RW+6}" height="${f2(H+2)}" fill="none" stroke="var(--bad)" stroke-width="2"/>`;
-    if(rkSel===it.id) s+=`<rect x="-5" y="${f2(y-2.5)}" width="${RW+10}" height="${f2(H+5)}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-dasharray="7 4"/>`;
-    s+=`<rect data-rk="${it.id}" x="0" y="${f2(y)}" width="${RW}" height="${f2(H)}" fill="transparent" style="cursor:grab"><title>${esc(rkName(it))} · U${it.u}${h>1?'–'+(it.u+h-1):''}</title></rect>`;
+    else s+=`<g transform="translate(${f2(x1)},${f2(y)})">${kitFaceSvg(it,h,Wd)}</g>`;
+    const H=h*RU-0.8, hitY=CARRIER(it.t)?y:y, hitH=CARRIER(it.t)?12:H;
+    if(bad.has(it.id)) s+=`<rect x="${f2(x1-3)}" y="${f2(y-1)}" width="${f2(Wd+6)}" height="${f2(H+2)}" fill="none" stroke="var(--bad)" stroke-width="2"/>`;
+    if(rkSel===it.id) s+=`<rect x="${f2(x1-5)}" y="${f2(y-2.5)}" width="${f2(Wd+10)}" height="${f2(H+5)}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-dasharray="7 4"/>`;
+    // holders are grabbed by their top strip and ears so the units inside stay clickable
+    if(CARRIER(it.t)) s+=`<g data-rk="${it.id}" style="cursor:grab"><rect x="${f2(x1)}" y="${f2(y)}" width="${f2(Wd)}" height="12" fill="transparent"/>${Wd>=RW-1?`<rect x="0" y="${f2(y)}" width="${RAIL}" height="${f2(H)}" fill="transparent"/><rect x="${RW-RAIL}" y="${f2(y)}" width="${RAIL}" height="${f2(H)}" fill="transparent"/>`:''}<title>${esc(rkName(it))} · drag by the top strip</title></g>`;
+    else s+=`<rect data-rk="${it.id}" x="${f2(x1)}" y="${f2(y)}" width="${f2(Wd)}" height="${f2(H)}" fill="transparent" style="cursor:grab"><title>${esc(rkName(it))} · U${it.u}${h>1?'–'+(it.u+h-1):''}</title></rect>`;
   }
   svg.innerHTML=s;
   const occ=rkOccupied(rk,side);let free=0;for(let u=1;u<=rk.U;u++)if(!occ[u])free++;
@@ -1646,16 +1800,22 @@ function renderRack(){
   $('rkFigF').classList.toggle('active',rkSide==='front');$('rkFigR').classList.toggle('active',rkSide==='rear');$('rkSideLbl').textContent=rkSide;
   renderElev('front');renderElev('rear');
   // library
-  let h=`<div class="cat">Your panels</div>`;
-  h+=panels.map(p=>`<button class="libitem" data-rkpanel="${p.id}"><svg viewBox="0 0 34 30" aria-hidden="true"><rect x="1" y="${15-Math.min(13,p.U*4)}" width="32" height="${Math.min(26,p.U*8)}" rx="1.5" fill="#1d1f22"/></svg><span style="min-width:0"><div class="nm">${esc(p.name)}</div><div class="pn">${p.U}U panel${p.shelf?.on?' + shelf':''}</div></span><span></span></button>`).join('');
-  let g='';for(const [i,k] of KIT.entries()){if(k.g!==g){g=k.g;h+=`<div class="cat">${esc(g)}</div>`;}
+  const q=($('rkQ')?.value||'').trim().toLowerCase(), hit=t=>!q||t.toLowerCase().includes(q);
+  let h='';
+  const myPanels=panels.filter(p=>hit(p.name+' panel'));
+  if(myPanels.length)h+=`<div class="cat">Your panels</div>`;
+  h+=myPanels.map(p=>`<button class="libitem" data-rkpanel="${p.id}"><svg viewBox="0 0 34 30" aria-hidden="true"><rect x="1" y="${15-Math.min(13,p.U*4)}" width="32" height="${Math.min(26,p.U*8)}" rx="1.5" fill="#1d1f22"/></svg><span style="min-width:0"><div class="nm">${esc(p.name)}</div><div class="pn">${p.U}U panel${p.shelf?.on?' + shelf':''}</div></span><span></span></button>`).join('');
+  let pg='';for(const [i,r] of PRODUCTS.entries()){const [grp,brand,name,part,form,u,wmm,hmm,dmm,io,note,src,conf]=r;if(!hit([grp,brand,name,part,io].join(' ')))continue;if(grp!==pg){pg=grp;h+=`<div class="cat">${esc(grp)}</div>`;}
+    const it=prodItem(r),fl=it.w>=1?'Full':it.w===0.5?'½':'⅓';
+    h+=`<button class="libitem" data-rkprod="${i}" title="${esc(brand+' '+name+(io?' — '+io:''))}"><svg viewBox="0 0 34 30" aria-hidden="true"><rect x="${17-16*Math.min(1,it.w)}" y="${15-Math.min(13,it.h*4)}" width="${32*Math.min(1,it.w)}" height="${Math.min(26,it.h*8)}" rx="1.5" fill="${CARRIER(it.t)?'none':'#2c3036'}" stroke="${CARRIER(it.t)?'var(--muted)':'var(--line)'}"/></svg><span style="min-width:0"><div class="nm">${esc(name)}</div><div class="pn">${esc(brand)} · ${it.t==='desktop'?'desktop':it.h+'U'} ${it.w<1?fl+' width':''} · ${dmm} mm</div></span><i class="dot ${conf}" title="${conf==='high'?'Maker spec':conf==='med'?'Retailer spec':'Estimated — check'}"></i></button>`;}
+  let g='';for(const [i,k] of KIT.entries()){if(!hit(k.g+' generic '+k.name))continue;if(k.g!==g){g=k.g;h+=`<div class="cat">Generic · ${esc(g)}</div>`;}
     h+=`<button class="libitem" data-rkkit="${i}"><svg viewBox="0 0 34 30" aria-hidden="true"><rect x="1" y="${15-Math.min(13,k.h*4)}" width="32" height="${Math.min(26,k.h*8)}" rx="1.5" fill="${k.t==='kit'?'#2c3036':'#1d1f22'}" stroke="var(--line)"/></svg><span style="min-width:0"><div class="nm">${esc(k.name)} ${k.h}U</div><div class="pn">${k.d?k.d+' mm deep':'no depth'}</div></span><span></span></button>`;}
-  $('rkLib').innerHTML=h;
+  $('rkLib').innerHTML=h||`<p class="note" style="padding:12px">Nothing matches “${esc(q)}”. Add it as custom kit below.</p>`;
   // summary + list
   const {list,bad}=rkChecks(rk), occF=rkOccupied(rk,'front'), occR=rkOccupied(rk,'rear'); let fF=0,fR=0;for(let u=1;u<=rk.U;u++){if(!occF[u])fF++;if(!occR[u])fR++;}
   $('rkSum').innerHTML=`<span>Rack <b>${rk.U}U × ${rk.depth} mm</b></span><span>Front <b>${rk.U-fF}U used</b>, ${fF}U free</span><span>Rear <b>${rk.U-fR}U used</b>, ${fR}U free</span><span>${list.some(w=>w.lvl==='bad')?`<b style="color:var(--bad)">${list.filter(w=>w.lvl==='bad').length} problem(s)</b>`:list.length?`<b style="color:var(--warn)">${list.length} to check</b>`:'<b style="color:var(--ok)">Everything fits</b>'}</span>`;
   const rows=rk.items.slice().sort((a,b)=>(b.u+rkH(b))-(a.u+rkH(a))||(a.side<b.side?-1:1));
-  $('rkList').innerHTML=rows.map(it=>{const h=rkH(it);return `<tr data-rkrow="${it.id}" class="${rkSel===it.id?'sel':''}"><td class="mono">${h>1?`${it.u+h-1}–${it.u}`:it.u}</td><td>${it.side==='front'?'Front':'Rear'}</td><td>${esc(rkName(it))}${bad.has(it.id)?' <span class="chip low">Check</span>':''}</td><td class="num">${h}U</td><td class="num">${+it.d||0} mm</td><td>${esc(it.notes||'')}</td></tr>`;}).join('')||`<tr><td colspan="6" class="note">Add your panels and kit from the list on the left.</td></tr>`;
+  $('rkList').innerHTML=rows.map(it=>{const h=rkH(it);return `<tr data-rkrow="${it.id}" class="${rkSel===it.id?'sel':''}"><td class="mono">${h>1?`${it.u+h-1}–${it.u}`:it.u}</td><td>${it.side==='front'?'Front':'Rear'}</td><td>${esc(rkName(it))}${bad.has(it.id)?' <span class="chip low">Check</span>':''}</td><td class="num">${h}U${rkW(it)<1?(rkW(it)===0.5?' ½':' ⅓'):''}</td><td class="num">${+it.d||0} mm</td><td>${esc(it.notes||'')}</td></tr>`;}).join('')||`<tr><td colspan="6" class="note">Add your panels and kit from the list on the left.</td></tr>`;
   renderRkInsp(list);
   $('rkUndo').disabled=!rkUndoS.length;$('rkRedo').disabled=!rkRedoS.length;
 }
@@ -1668,8 +1828,12 @@ function renderRkInsp(list){
   const h=rkH(it),isPanel=it.t==='panel',p=isPanel?rkPanelOf(it):null;
   $('rkInspTitle').textContent=rkName(it);
   el.innerHTML=`${isPanel?`<dl class="kv"><dt>Panel</dt><dd>${esc(p?p.name:'deleted')}</dd><dt>Height</dt><dd>${h}U (from the panel)</dd></dl><button class="btn sm" id="rkEditPanel"${p?'':' disabled'}>Edit this panel in the designer</button>`
-      :`<label class="field"><span>Name</span><input id="rkiName" value="${esc(it.name||'')}"></label>
-        <div class="two">${numField('rkiH','Height U',h,1)}<label class="field"><span>Type</span><select id="rkiT">${[['kit','Equipment'],['shelf','Shelf / drawer'],['blank','Blank panel'],['vent','Vent panel'],['brush','Brush / cable entry']].map(([v,l])=>`<option value="${v}"${it.t===v?' selected':''}>${l}</option>`).join('')}</select></label></div>`}
+      :`${it.brand?`<div class="row"><span class="chip ${it.conf||'med'}"><i class="dot ${it.conf||'med'}"></i>${it.conf==='high'?'Maker spec':it.conf==='low'?'Check':'Retailer spec'}</span><span class="mono note">${esc(it.brand)} ${esc(it.part||'')}</span></div>
+        <dl class="kv">${it.io?`<dt>I/O</dt><dd style="font-family:var(--f-body)">${esc(it.io)}</dd>`:''}${it.wmm?`<dt>Size</dt><dd>${f2(it.wmm)} × ${f2(it.hmm||0)} × ${f2(it.d||0)}</dd>`:''}${it.holds?`<dt>Holds</dt><dd>${it.holds} units</dd>`:''}${it.pnote?`<dt>Note</dt><dd style="font-family:var(--f-body)">${esc(it.pnote)}</dd>`:''}${it.src?`<dt>Source</dt><dd><a href="${esc(it.src)}" target="_blank" rel="noopener">Spec</a></dd>`:''}</dl>`:''}
+        <label class="field"><span>Name</span><input id="rkiName" value="${esc(it.name||'')}"></label>
+        <div class="two">${numField('rkiH','Height U',h,1)}<label class="field"><span>Type</span><select id="rkiT">${[['kit','Rack equipment'],['desktop','Desktop unit (needs holder)'],['mount','Mount (holds units)'],['shelf','Shelf / drawer'],['blank','Blank panel'],['vent','Vent panel'],['brush','Brush / cable entry']].map(([v,l])=>`<option value="${v}"${it.t===v?' selected':''}>${l}</option>`).join('')}</select></label></div>
+        <div class="two"><label class="field"><span>Width</span><select id="rkiW">${[[1,'Full 19"'],[0.5,'Half rack'],[1/3,'Third rack']].map(([v,l])=>`<option value="${v}"${Math.abs(rkW(it)-v)<0.01?' selected':''}>${l}</option>`).join('')}</select></label>
+        <label class="field"><span>Position</span><select id="rkiPos"${rkW(it)>=1?' disabled':''}>${Array.from({length:rkSlots(it)},(_,k)=>`<option value="${k}"${(it.pos||0)===k?' selected':''}>${rkSlots(it)===2?['Left','Right'][k]:['Left','Centre','Right'][k]||k+1}</option>`).join('')}</select></label></div>`}
     <div class="two">${numField('rkiU','Bottom U',it.u,1)}${numField('rkiD','Depth mm',+it.d||0,5)}</div>
     <label class="field"><span>Side</span><select id="rkiSide"><option value="front"${it.side==='front'?' selected':''}>Front</option><option value="rear"${it.side==='rear'?' selected':''}>Rear</option></select></label>
     <label class="field"><span>Notes</span><input id="rkiNotes" value="${esc(it.notes||'')}" placeholder="e.g. needs 2× IEC, fed from PDU"></label>
@@ -1681,8 +1845,10 @@ function renderRkInsp(list){
   $('rkiName')?.addEventListener('input',e=>{it.name=e.target.value;persist();renderElev('front');renderElev('rear');});
   $('rkiH')?.addEventListener('change',up(v=>it.h=Math.max(1,Math.min(rk.U,v|0))));
   $('rkiT')?.addEventListener('change',up(v=>it.t=v));
+  $('rkiW')?.addEventListener('change',up(v=>{it.w=+v;it.pos=Math.min(it.pos||0,rkSlots(it)-1);}));
+  $('rkiPos')?.addEventListener('change',up(v=>it.pos=+v));
   $('rkiU').addEventListener('change',up(v=>it.u=Math.max(1,Math.min(rk.U,v|0))));
-  $('rkiD').addEventListener('change',up(v=>it.d=Math.max(0,+v||0)));
+  $('rkiD').addEventListener('change',up(v=>{it.d=Math.max(0,+v||0);it.dEst=false;}));
   $('rkiSide').addEventListener('change',up(v=>{it.side=v;rkSide=v;}));
   $('rkiNotes').addEventListener('focus',()=>rkPushUndo());
   $('rkiNotes').addEventListener('input',e=>{it.notes=e.target.value;persist();});
@@ -1702,20 +1868,26 @@ for(const side of ['front','rear']){
     const hit=e.target.closest('[data-rk]');
     if(!hit){rkSel=null;renderRack();return;}
     rkSel=hit.dataset.rk;const it=RK().items.find(i=>i.id===rkSel);
-    rkDrag={it,startY:pt(e).y,u0:it.u,moved:false,svg};svg.setPointerCapture(e.pointerId);renderRack();e.preventDefault();
+    rkDrag={it,startY:pt(e).y,startX:pt(e).x,u0:it.u,p0:it.pos||0,moved:false,svg};svg.setPointerCapture(e.pointerId);renderRack();e.preventDefault();
   });
   svg.addEventListener('pointermove',e=>{
-    if(!rkDrag||rkDrag.svg!==svg)return;const dy=pt(e).y-rkDrag.startY,du=Math.round(-dy/RU);
-    const rk=RK(),h=rkH(rkDrag.it),nu=Math.max(1,Math.min(rk.U-h+1,rkDrag.u0+du));
-    if(nu!==rkDrag.it.u){if(!rkDrag.moved){rkPushUndo();rkDrag.moved=true;}rkDrag.it.u=nu;renderElev('front');renderElev('rear');}
+    if(!rkDrag||rkDrag.svg!==svg)return;const P2=pt(e),dy=P2.y-rkDrag.startY,du=Math.round(-dy/RU);
+    const rk=RK(),it=rkDrag.it,h=rkH(it),nu=Math.max(1,Math.min(rk.U-h+1,rkDrag.u0+du));
+    let np=it.pos||0; if(rkW(it)<1){const n=rkSlots(it);np=Math.max(0,Math.min(n-1,Math.floor((P2.x-RAIL)/(rkW(it)*RIW))));}
+    if(nu!==it.u||np!==(it.pos||0)){if(!rkDrag.moved){rkPushUndo();rkDrag.moved=true;}
+      // a holder carries the units sitting in it
+      if(CARRIER(it.t)&&nu!==it.u){const du2=nu-it.u;for(const o of rk.items)if(o!==it&&rkCarrierOf(rk,o)===it)o.u+=du2;}
+      it.u=nu;it.pos=np;renderElev('front');renderElev('rear');}
   });
   const end=()=>{if(rkDrag){const m=rkDrag.moved;rkDrag=null;if(m){persist();renderRack();}}};
   svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
 }
 $('rkLib').addEventListener('click',e=>{
   const pb=e.target.closest('[data-rkpanel]');if(pb){const p=panels.find(x=>x.id===pb.dataset.rkpanel);if(p)rkAdd({t:'panel',panelId:p.id,side:rkSide,d:p.shelf?.on?+p.shelf.depth:80});return;}
+  const pr=e.target.closest('[data-rkprod]');if(pr){rkAdd(Object.assign(prodItem(PRODUCTS[+pr.dataset.rkprod]),{side:rkSide}));return;}
   const kb=e.target.closest('[data-rkkit]');if(kb){const k=KIT[+kb.dataset.rkkit];rkAdd({t:k.t,name:k.name,h:k.h,d:k.d,side:rkSide});}
 });
+$('rkQ').addEventListener('input',()=>renderRack());
 $('rkcGo').onclick=()=>{const name=$('rkcName').value.trim();if(!name){toast('Give the kit a name first');$('rkcName').focus();return;}
   rkAdd({t:$('rkcT').value,name,h:Math.max(1,+$('rkcU').value|0),d:Math.max(0,+$('rkcD').value||0),side:rkSide});};
 $('rkList').addEventListener('click',e=>{const r=e.target.closest('[data-rkrow]');if(!r)return;rkSel=r.dataset.rkrow;const it=RK().items.find(i=>i.id===rkSel);if(it)rkSide=it.side;renderRack();});
@@ -1735,14 +1907,17 @@ function rkKey(e){
   const it=RK().items.find(i=>i.id===rkSel);if(!it)return;
   if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();rkPushUndo();RK().items=RK().items.filter(i=>i!==it);rkSel=null;persist();renderRack();return;}
   if(e.key==='Escape'){rkSel=null;renderRack();return;}
-  if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();rkPushUndo();const h=rkH(it);it.u=Math.max(1,Math.min(RK().U-h+1,it.u+(e.key==='ArrowUp'?1:-1)));persist();renderRack();}
+  if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();rkPushUndo();const h=rkH(it),old=it.u;it.u=Math.max(1,Math.min(RK().U-h+1,it.u+(e.key==='ArrowUp'?1:-1)));
+    if(CARRIER(it.t)){const d=it.u-old;for(const o of RK().items)if(o!==it&&o.side===it.side&&!CARRIER(o.t)&&o.u>=old&&o.u+rkH(o)<=old+h&&rkX(o)[0]>=rkX(it)[0]-0.5&&rkX(o)[1]<=rkX(it)[1]+0.5)o.u+=d;}
+    persist();renderRack();}
+  if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&rkW(it)<1){e.preventDefault();rkPushUndo();it.pos=Math.max(0,Math.min(rkSlots(it)-1,(it.pos||0)+(e.key==='ArrowRight'?1:-1)));persist();renderRack();}
 }
 // exports
 const rkSlug=()=>(RK().name||'rack').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'rack';
 function rkRowsSorted(rk){return rk.items.slice().sort((a,b)=>(a.side<b.side?-1:a.side>b.side?1:0)||((b.u+rkH(b))-(a.u+rkH(a))));}
 $('rkCsv').onclick=()=>{const rk=RK(),q=v=>`"${String(v).replace(/"/g,'""')}"`;
-  const lines=[['Top U','Bottom U','Side','Item','Height U','Depth mm','Type','Notes'].map(q).join(',')];
-  for(const it of rkRowsSorted(rk)){const h=rkH(it);lines.push([it.u+h-1,it.u,it.side==='front'?'Front':'Rear',rkName(it),h,+it.d||0,it.t==='panel'?'Custom panel':it.t,it.notes||''].map(q).join(','));}
+  const lines=[['Top U','Bottom U','Side','Width','Position','Item','Brand','Part','Height U','Depth mm','Type','Held by','Notes'].map(q).join(',')];
+  for(const it of rkRowsSorted(rk)){const h=rkH(it),w=rkW(it),c=rkCarrierOf(rk,it);lines.push([it.u+h-1,it.u,it.side==='front'?'Front':'Rear',w>=1?'Full':w===0.5?'Half':'Third',w>=1?'':(rkSlots(it)===2?['Left','Right']:['Left','Centre','Right'])[it.pos||0],rkName(it),it.brand||'',it.part||'',h,+it.d||0,it.t==='panel'?'Custom panel':it.t,c?rkName(c):'',it.notes||''].map(q).join(','));}
   saveFile(rkSlug()+'-kit-list.csv',lines.join('\r\n')+'\r\n','text/csv');};
 $('rkSave').onclick=()=>{const rk=RK();const ps=panels.filter(p=>rk.items.some(i=>i.panelId===p.id));
   saveFile(rkSlug()+'.rackplan.json',JSON.stringify({app:'kudos-rack-plan',v:1,rack:rk,panels:ps,customs,logos},null,1),'application/json');};
@@ -1770,11 +1945,13 @@ $('rkPdf').onclick=async()=>{
     doc.setFillColor(12,13,15);doc.rect(ox,oy,ew,RH*k,'F');doc.setFillColor(70,74,80);doc.rect(ox,oy,RAIL*k,RH*k,'F');doc.rect(ox+ew-RAIL*k,oy,RAIL*k,RH*k,'F');
     doc.setFont('helvetica','normal');doc.setFontSize(6.5);doc.setTextColor(100);
     for(let u=1;u<=rk.U;u++){const yc=oy+(RH-(u-0.5)*RU)*k;doc.text(String(u),ox-1.5,yc+1,{align:'right'});doc.text(String(u),ox+ew+1.5,yc+1);}
-    for(const it of rk.items.filter(i=>i.side===side)){const h=rkH(it),y=oy+(RH-(it.u+h-1)*RU+0.4)*k,Hh=(h*RU-0.8)*k;
-      if(it.t==='panel'&&rkPanelOf(it)){const p=rkPanelOf(it);drawPanelPdf(doc,p,ox+(RW-rackW(p))/2*k,y,k);}
-      else{doc.setFillColor(it.t==='kit'?58:it.t==='shelf'?75:34,it.t==='kit'?62:it.t==='shelf'?80:36,it.t==='kit'?68:it.t==='shelf'?86:40);doc.rect(ox,y,ew,Hh,'F');
-        doc.setTextColor(235);doc.setFontSize(Math.min(9,Hh*2.2));doc.text(rkName(it),ox+ew/2,y+Hh/2,{align:'center',baseline:'middle'});}
-      doc.setDrawColor(0);doc.setLineWidth(0.15);doc.rect(ox,y,ew,Hh);}
+    const mine=rk.items.filter(i=>i.side===side).sort((a,b)=>(CARRIER(b.t)?1:0)-(CARRIER(a.t)?1:0));
+    for(const it of mine){const h=rkH(it),y=oy+(RH-(it.u+h-1)*RU+0.4)*k,Hh=(h*RU-0.8)*k,[x1,x2]=rkX(it),X1=ox+x1*k,Wd=(x2-x1)*k;
+      if(it.t==='panel'&&rkPanelOf(it)){const p=rkPanelOf(it);drawPanelPdf(doc,p,ox+(RW-rackW(p))/2*k,y,k);doc.setDrawColor(0);doc.setLineWidth(0.15);doc.rect(X1,y,Wd,Hh);}
+      else if(CARRIER(it.t)){doc.setFillColor(22,24,27);doc.rect(X1,y,Wd,Hh,'F');doc.setDrawColor(110);doc.setLineWidth(0.2);doc.rect(X1,y,Wd,Hh);doc.setTextColor(150);doc.setFontSize(5.5);doc.text(rkName(it),X1+(Wd>=ew-0.5?RAIL*k+1:1),y+2.2);}
+      else{let bx=X1,bw=Wd,by=y,bh=Hh;if(Wd<ew-0.5||it.t==='desktop'){bw=Math.min(Wd-0.6,(it.wmm||9e9)*k);bh=Math.min(Hh,(it.hmm||9e9)*k);bx=X1+(Wd-bw)/2;by=y+Hh-bh;}
+        doc.setFillColor(it.t==='kit'||it.t==='desktop'?58:34,it.t==='kit'||it.t==='desktop'?62:36,it.t==='kit'||it.t==='desktop'?68:40);doc.rect(bx,by,bw,bh,'F');doc.setDrawColor(0);doc.setLineWidth(0.15);doc.rect(bx,by,bw,bh);
+        doc.setTextColor(235);let fsz=Math.min(9,bh*2.2);doc.setFontSize(fsz);let nm=rkName(it);while(nm.length>4&&doc.getTextWidth(nm)>bw-1){nm=nm.slice(0,-2)+'…';}doc.text(nm,bx+bw/2,by+bh/2,{align:'center',baseline:'middle'});}}
   };
   elev('front',ox1);elev('rear',ox2);
   const {list}=rkChecks(rk);doc.setFontSize(8);doc.setTextColor(20);doc.setFont('helvetica','bold');doc.text('NOTES',16,PH-40);doc.setFont('helvetica','normal');
@@ -1784,9 +1961,9 @@ $('rkPdf').onclick=async()=>{
   doc.setFontSize(7);doc.setTextColor(90);doc.text(`${today()} · Not to scale`,PW-16,PH-14,{align:'right'});
   // page 2 — kit list
   doc.addPage('a3','landscape');frame(2);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20);doc.text('KIT LIST',16,32);
-  const cols=[['U',22],['Side',20],['Item',120],['Height',18],['Depth',22],['Type',34],['Notes',150]];let y=42;
+  const cols=[['U',20],['Side',16],['Item',92],['Brand / part',80],['Size',26],['Depth',20],['Held by',60],['Notes',72]];let y=42;
   doc.setFillColor(235,238,242);doc.rect(16,y-4,cols.reduce((a,c)=>a+c[1],0),6.5,'F');doc.setFontSize(8);let x=16;for(const [hh,w] of cols){doc.text(hh,x+1.5,y);x+=w;}doc.setFont('helvetica','normal');y+=6;
-  for(const it of rkRowsSorted(rk)){const h=rkH(it);const cells=[h>1?`${it.u+h-1}–${it.u}`:String(it.u),it.side==='front'?'Front':'Rear',rkName(it),h+'U',(+it.d||0)+' mm',it.t==='panel'?'Custom panel':it.t,it.notes||''];
+  for(const it of rkRowsSorted(rk)){const h=rkH(it);const w=rkW(it),c=rkCarrierOf(rk,it);const cells=[h>1?`${it.u+h-1}–${it.u}`:String(it.u),it.side==='front'?'Front':'Rear',rkName(it),it.t==='panel'?'Custom panel':[it.brand,it.part].filter(Boolean).join(' '),h+'U'+(w>=1?'':w===0.5?' 1/2':' 1/3'),(+it.d||0)+' mm',c?rkName(c):'',it.notes||''];
     const wr=cells.map((c,i)=>doc.splitTextToSize(String(c),cols[i][1]-3));const rh=Math.max(...wr.map(w=>w.length))*3.4+2.4;if(y+rh>PH-16){doc.addPage('a3','landscape');frame(2);y=32;}
     x=16;wr.forEach((w,i)=>{doc.text(w,x+1.5,y);x+=cols[i][1];});doc.setDrawColor(215);doc.setLineWidth(0.1);doc.line(16,y+rh-3.2,16+cols.reduce((a,c)=>a+c[1],0),y+rh-3.2);y+=rh;}
   await saveFile(rkSlug()+'-rack.pdf',new Uint8Array(doc.output('arraybuffer')),'application/pdf');

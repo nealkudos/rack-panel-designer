@@ -6,7 +6,7 @@ Browser tool for laying out 19" and 10" rack panels and sending them to panel ma
 
 - 75 connector cutouts: Neutrik D-size family, speakON, powerCON, IEC, CEE, Socapex, Harting, D-sub, VEAM Powerlock and CIR, switches, LEDs, fans and vents
 - Custom parts and uploaded logos (SVG, PNG or JPG — engraved as vectors)
-- Rack planner: front and rear rack elevations, drop in your designed panels and kit by U, depth and overlap checks, rack PDF and kit list CSV
+- Rack planner: front and rear rack elevations, drop in your designed panels and kit by U, half and third-rack positions, real units (Focusrite, Apple, PDUs, wireless, video) with their mounts and shelves, depth and overlap checks, rack PDF and kit list CSV
 - Device shelf builder: add device boxes (W × H × D), cut front windows, tray shelf with strap and vent slots, shelf DXF + PDF sheet
 - Exports: DXF (OUTLINE / CUT / ENGRAVE layers), dimensioned A3 PDF drawing with cutout schedule, SVG, and a zipped fabrication pack
 - Projects save in the browser and can be saved/opened as `.rackpanel.json`
