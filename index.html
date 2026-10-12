@@ -288,6 +288,13 @@ a{color:var(--accent)}
         <figure id="rkFigR"><figcaption><span>Rear</span><span class="mono" id="rkFreeR"></span></figcaption><svg id="rkSvgR" xmlns="http://www.w3.org/2000/svg"></svg></figure>
       </div>
       <div class="rk-sum" id="rkSum"></div>
+      <div class="toolbar" style="border-top:1px solid var(--line)">
+        <span class="note" style="font-family:var(--f-display);text-transform:uppercase;letter-spacing:.1em;font-weight:700">Depth</span>
+        <button class="btn sm on" id="dvTop" aria-pressed="true">Top view</button><button class="btn sm" id="dvSide" aria-pressed="false">Side view</button>
+        <label class="row note" id="dvULbl">at U <select id="dvU" aria-label="Which U to look down on" style="font-size:13px;padding:3px 6px"></select></label>
+        <span class="note" id="dvHint"></span>
+      </div>
+      <div style="background:var(--canvas);padding:14px 16px;overflow-x:auto"><svg id="rkSvgD" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:auto;min-width:520px"></svg></div>
       <div class="sched"><table><thead><tr><th>U</th><th>Side</th><th>Item</th><th style="text-align:right">Height</th><th style="text-align:right">Depth</th><th>Notes</th></tr></thead><tbody id="rkList"></tbody></table></div>
     </section>
     <aside class="pane insp" aria-label="Rack inspector">
@@ -1704,7 +1711,7 @@ function rkChecks(rk){
   for(const it of rk.items) if((+it.d||0)>rk.depth){out.push({lvl:'bad',id:it.id,msg:`${rkName(it)} is ${it.d} mm deep — deeper than the ${rk.depth} mm rack.`});bad.add(it.id);}
   // front + rear depth at the same height
   const f=rk.items.filter(i=>i.side==='front'),r=rk.items.filter(i=>i.side==='rear');
-  for(const A of f)for(const B of r){ if(rkOverlapU(A,B)&&rkOverlapX(Object.assign({},A,{side:'x'}),Object.assign({},B,{side:'x'}))){const sum=(+A.d||0)+(+B.d||0);
+  for(const A of f)for(const B of r){ if(rkOverlapU(A,B)&&rkOverlapX(Object.assign({},A,{side:'x'}),Object.assign({},B,{side:'x'}))){const sum=Math.round((+A.d||0)+(+B.d||0));
     if(sum>rk.depth){out.push({lvl:'bad',id:B.id,msg:`${rkName(A)} (front, ${A.d} mm) and ${rkName(B)} (rear, ${B.d} mm) need ${sum} mm — the rack is ${rk.depth} mm deep.`});bad.add(A.id);bad.add(B.id);}
     else if(rk.depth-sum<30) out.push({lvl:'warn',id:B.id,msg:`${rkName(A)} and ${rkName(B)} leave only ${rk.depth-sum} mm for cables between them.`});}}
   if(rk.rails==='front'){for(const it of rk.items.filter(i=>i.side==='rear'))out.push({lvl:'warn',id:it.id,msg:`${rkName(it)} is on the rear but this rack has front rails only.`});
@@ -1793,12 +1800,81 @@ function renderElev(side){
   const occ=rkOccupied(rk,side);let free=0;for(let u=1;u<=rk.U;u++)if(!occ[u])free++;
   $(side==='front'?'rkFreeF':'rkFreeR').textContent=`${free}U free`;
 }
+/* ---- depth views ---- */
+let dvMode='top', dvU=null; try{dvMode=localStorage.getItem(LS+'-dv')||'top';}catch(e){}
+function rkDepthAt(rk,u,side){const its=rk.items.filter(i=>i.side===side&&i.u<=u&&i.u+rkH(i)>u);return {its,max:Math.max(0,...its.map(i=>+i.d||0))};}
+function renderDepth(){
+  const rk=RK(),D=rk.depth,svg=$('rkSvgD');
+  $('dvTop').classList.toggle('on',dvMode==='top');$('dvSide').classList.toggle('on',dvMode==='side');
+  $('dvTop').setAttribute('aria-pressed',String(dvMode==='top'));$('dvSide').setAttribute('aria-pressed',String(dvMode==='side'));
+  $('dvULbl').hidden=dvMode!=='top';
+  const selIt=rk.items.find(i=>i.id===rkSel);
+  if(dvU==null||dvU>rk.U||dvU<1) dvU=selIt?selIt.u:rk.U;
+  $('dvU').innerHTML=Array.from({length:rk.U},(_,k)=>rk.U-k).map(u=>{const f=rkDepthAt(rk,u,'front'),r=rkDepthAt(rk,u,'rear');const lbl=[...f.its,...r.its].filter(i=>!CARRIER(i.t)||!rk.items.some(o=>rkCarrierOf(rk,o)===i&&o.u<=u&&o.u+rkH(o)>u)).map(i=>rkName(i)).slice(0,2).join(', ');return `<option value="${u}"${u===dvU?' selected':''}>U${u}${lbl?' — '+esc(lbl):''}</option>`;}).join('');
+  const fnt='font-family="Barlow Condensed, Arial Narrow, sans-serif"', mono='font-family="JetBrains Mono, monospace"';
+  const colFor=it=>it.side==='front'?'#3b5f9e':'#7a4f2a', strokeFor=it=>it.side==='front'?'#6d9cff':'#f0a35a';
+  let s='';
+  if(dvMode==='top'){
+    // plan looking down on one U: x = rack width, y = depth (front at the bottom)
+    const pad=40, Wv=RW+pad*2+120, Hv=D+90, Y=d=>40+(D-d); // d = distance from front rails
+    svg.setAttribute('viewBox',`0 0 ${Wv} ${Hv}`);
+    s+=`<rect x="${pad}" y="40" width="${RW}" height="${D}" fill="#0d0f12" stroke="#3a3e44"/>`;
+    for(let d=100;d<D;d+=100)s+=`<path d="M${pad} ${Y(d)}H${pad+RW}" stroke="#1d2126" stroke-dasharray="4 4"/><text x="${pad-6}" y="${Y(d)}" font-size="11" text-anchor="end" dominant-baseline="central" fill="var(--muted)" ${mono}>${d}</text>`;
+    s+=`<rect x="${pad}" y="${Y(0)-4}" width="${RW}" height="4" fill="#4b5058"/><text x="${pad+RW/2}" y="${Y(0)+18}" font-size="13" text-anchor="middle" fill="var(--muted)" ${fnt} font-weight="700" letter-spacing="1.5">FRONT RAILS</text>`;
+    if(rk.rails!=='front') s+=`<rect x="${pad}" y="${Y(D)}" width="${RW}" height="4" fill="#4b5058"/>`;
+    s+=`<text x="${pad+RW/2}" y="${Y(D)-12}" font-size="13" text-anchor="middle" fill="var(--muted)" ${fnt} font-weight="700" letter-spacing="1.5">${rk.rails!=='front'?'REAR RAILS':'BACK OF RACK'} · ${D} mm</text>`;
+    const here=rk.items.filter(i=>i.u<=dvU&&i.u+rkH(i)>dvU).sort((a,b)=>(CARRIER(b.t)?1:0)-(CARRIER(a.t)?1:0));
+    for(const it of here){
+      let [x1,x2]=rkX(it); if(it.side==='rear')[x1,x2]=[RW-x2,RW-x1]; // seen from above, rear kit is mirrored left-right
+      if(it.t!=='panel'&&rkW(it)<1&&it.wmm){const bw=Math.min(x2-x1-2,it.wmm);const cx=(x1+x2)/2;[x1,x2]=[cx-bw/2,cx+bw/2];}
+      const d=+it.d||0, y1=it.side==='front'?Y(d):Y(D), y2=it.side==='front'?Y(0):Y(D-d);
+      if(CARRIER(it.t)) s+=`<rect x="${f2(pad+x1)}" y="${f2(y1)}" width="${f2(x2-x1)}" height="${f2(y2-y1)}" fill="none" stroke="#8b939e" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${f2(pad+x1+4)}" y="${f2(it.side==='front'?y1-5:y2+12)}" font-size="10" fill="#8b939e" ${fnt}>${esc(rkName(it))} · ${d} mm</text>`;
+      else{const sel=rkSel===it.id;s+=`<rect data-dv="${it.id}" x="${f2(pad+x1)}" y="${f2(y1)}" width="${f2(x2-x1)}" height="${f2(Math.max(2,y2-y1))}" fill="${colFor(it)}" fill-opacity=".85" stroke="${sel?'#fff':strokeFor(it)}" stroke-width="${sel?2.5:1.2}" style="cursor:pointer"/>`;
+        const fs=Math.min(14,(x2-x1)/(Math.max(rkName(it).length,6)*0.5));
+        if(y2-y1>24)s+=`<text x="${f2(pad+(x1+x2)/2)}" y="${f2((y1+y2)/2-fs*0.4)}" font-size="${f2(fs)}" text-anchor="middle" dominant-baseline="central" fill="#fff" ${fnt} font-weight="600" pointer-events="none">${esc(rkName(it))}</text><text x="${f2(pad+(x1+x2)/2)}" y="${f2((y1+y2)/2+fs*0.75)}" font-size="${f2(Math.max(9,fs*0.8))}" text-anchor="middle" dominant-baseline="central" fill="#dfe6ee" ${mono} pointer-events="none">${d} mm${it.dEst?' (est.)':''}</text>`;}
+    }
+    // clearance between front and rear kit at this U
+    const f=rkDepthAt(rk,dvU,'front').max, r=rkDepthAt(rk,dvU,'rear').max, gap=Math.round(D-f-r), gc=gap<0?'var(--bad)':gap<30?'var(--warn)':'var(--ok)';
+    const xg=pad+RW+40;
+    s+=`<path d="M${xg} ${Y(f)}V${Y(D-r)}" stroke="${gc}" stroke-width="2"/><path d="M${xg-6} ${Y(f)}h12M${xg-6} ${Y(D-r)}h12" stroke="${gc}" stroke-width="2"/>`;
+    s+=`<text x="${xg+10}" y="${f2((Y(f)+Y(D-r))/2)}" font-size="13" dominant-baseline="central" fill="${gc}" ${mono} font-weight="500">${gap<0?'over by '+(-gap):gap+' mm'}</text><text x="${xg+10}" y="${f2((Y(f)+Y(D-r))/2+16)}" font-size="11" dominant-baseline="central" fill="var(--muted)" ${fnt}>${gap<0?'clash':'for cables'}</text>`;
+    if(!here.length) s+=`<text x="${pad+RW/2}" y="${Y(D/2)}" font-size="16" text-anchor="middle" fill="var(--muted)" ${fnt}>Nothing at U${dvU}</text>`;
+    $('dvHint').textContent='Blue = front-mounted, orange = rear-mounted. Click a unit to select it.';
+  } else {
+    // side view: every U, depth left to right (front rails on the left)
+    const rowH=26, pad=240, Wv=pad+D+130, Hv=rk.U*rowH+70, X=d=>pad+d;
+    svg.setAttribute('viewBox',`0 0 ${Wv} ${Hv}`);
+    s+=`<rect x="${pad}" y="30" width="${D}" height="${rk.U*rowH}" fill="#0d0f12" stroke="#3a3e44"/>`;
+    for(let d=100;d<D;d+=100)s+=`<path d="M${X(d)} 30V${30+rk.U*rowH}" stroke="#1d2126" stroke-dasharray="4 4"/><text x="${X(d)}" y="${42+rk.U*rowH}" font-size="11" text-anchor="middle" fill="var(--muted)" ${mono}>${d}</text>`;
+    s+=`<text x="${X(0)}" y="20" font-size="12" fill="var(--muted)" ${fnt} font-weight="700" letter-spacing="1.2">FRONT</text><text x="${X(D)}" y="20" font-size="12" text-anchor="end" fill="var(--muted)" ${fnt} font-weight="700" letter-spacing="1.2">${rk.rails!=='front'?'REAR':'BACK'} · ${D} mm</text>`;
+    s+=`<rect x="${X(0)-3}" y="30" width="3" height="${rk.U*rowH}" fill="#4b5058"/>${rk.rails!=='front'?`<rect x="${X(D)}" y="30" width="3" height="${rk.U*rowH}" fill="#4b5058"/>`:''}`;
+    for(let u=rk.U;u>=1;u--){
+      const y=30+(rk.U-u)*rowH;
+      const f=rkDepthAt(rk,u,'front'),r=rkDepthAt(rk,u,'rear'),gap=Math.round(D-f.max-r.max),gc=gap<0?'var(--bad)':gap<30?'var(--warn)':'var(--ok)';
+      s+=`<path d="M${pad} ${y+rowH}H${pad+D}" stroke="#1d2126"/>`;
+      const label=[...f.its,...r.its].filter(i=>!CARRIER(i.t)).map(i=>rkName(i));
+      s+=`<text x="${pad-8}" y="${y+rowH/2}" font-size="11" text-anchor="end" dominant-baseline="central" fill="var(--ink)" ${fnt}>${esc((()=>{const t=label.length?label.slice(0,2).join(', ')+(label.length>2?' +'+(label.length-2):''):'—';return t.length>32?t.slice(0,31)+'…':t;})())}</text>`;
+      s+=`<text x="10" y="${y+rowH/2}" font-size="11" dominant-baseline="central" fill="var(--muted)" ${mono}>U${u}</text>`;
+      for(const side of ['front','rear'])for(const it of (side==='front'?f:r).its.slice().sort((a,b)=>(+b.d||0)-(+a.d||0))){
+        const d=+it.d||0,x1=side==='front'?X(0):X(D-d),sel=rkSel===it.id;
+        s+=`<rect data-dv="${it.id}" x="${f2(x1)}" y="${y+3}" width="${f2(Math.max(2,d))}" height="${rowH-6}" fill="${CARRIER(it.t)?'none':colFor(it)}" fill-opacity="${rkW(it)<1?.55:.85}" stroke="${sel?'#fff':CARRIER(it.t)?'#8b939e':strokeFor(it)}" stroke-width="${sel?2:1}" ${CARRIER(it.t)?'stroke-dasharray="5 3"':''} style="cursor:pointer"><title>${esc(rkName(it))} — ${d} mm (${side})</title></rect>`;
+      }
+      if(f.its.length||r.its.length) s+=`<text x="${X(D)+10}" y="${y+rowH/2}" font-size="11" dominant-baseline="central" fill="${gc}" ${mono}>${gap<0?'over '+(-gap):gap+' mm'}</text>`;
+    }
+    $('dvHint').textContent='Each bar is a unit’s depth. The figure on the right is the space left for cables at that U.';
+  }
+  svg.innerHTML=s;
+}
+$('dvTop').onclick=()=>{dvMode='top';try{localStorage.setItem(LS+'-dv','top');}catch(e){}renderDepth();};
+$('dvSide').onclick=()=>{dvMode='side';try{localStorage.setItem(LS+'-dv','side');}catch(e){}renderDepth();};
+$('dvU').addEventListener('change',e=>{dvU=+e.target.value;renderDepth();});
+$('rkSvgD').addEventListener('click',e=>{const h=e.target.closest('[data-dv]');if(!h)return;rkSel=h.dataset.dv;const it=RK().items.find(i=>i.id===rkSel);if(it){rkSide=it.side;if(dvMode==='side')dvU=it.u;}renderRack();});
 function renderRack(){
   const rk=RK();
   $('rkSel').innerHTML=racks.map((r,i)=>`<option value="${i}"${i===curRack?' selected':''}>${esc(r.name||'Rack')}</option>`).join('');
   for(const [id,k] of [['rkName','name'],['rkJob','job'],['rkU','U'],['rkD','depth'],['rkRails','rails']]) if(document.activeElement!==$(id)) $(id).value=rk[k]??'';
   $('rkFigF').classList.toggle('active',rkSide==='front');$('rkFigR').classList.toggle('active',rkSide==='rear');$('rkSideLbl').textContent=rkSide;
-  renderElev('front');renderElev('rear');
+  renderElev('front');renderElev('rear');renderDepth();
   // library
   const q=($('rkQ')?.value||'').trim().toLowerCase(), hit=t=>!q||t.toLowerCase().includes(q);
   let h='';
@@ -1867,7 +1943,7 @@ for(const side of ['front','rear']){
     if(rkSide!==side){rkSide=side;}
     const hit=e.target.closest('[data-rk]');
     if(!hit){rkSel=null;renderRack();return;}
-    rkSel=hit.dataset.rk;const it=RK().items.find(i=>i.id===rkSel);
+    rkSel=hit.dataset.rk;const it=RK().items.find(i=>i.id===rkSel);dvU=it.u;
     rkDrag={it,startY:pt(e).y,startX:pt(e).x,u0:it.u,p0:it.pos||0,moved:false,svg};svg.setPointerCapture(e.pointerId);renderRack();e.preventDefault();
   });
   svg.addEventListener('pointermove',e=>{
@@ -1877,7 +1953,7 @@ for(const side of ['front','rear']){
     if(nu!==it.u||np!==(it.pos||0)){if(!rkDrag.moved){rkPushUndo();rkDrag.moved=true;}
       // a holder carries the units sitting in it
       if(CARRIER(it.t)&&nu!==it.u){const du2=nu-it.u;for(const o of rk.items)if(o!==it&&rkCarrierOf(rk,o)===it)o.u+=du2;}
-      it.u=nu;it.pos=np;renderElev('front');renderElev('rear');}
+      it.u=nu;it.pos=np;renderElev('front');renderElev('rear');renderDepth();}
   });
   const end=()=>{if(rkDrag){const m=rkDrag.moved;rkDrag=null;if(m){persist();renderRack();}}};
   svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
@@ -1890,7 +1966,7 @@ $('rkLib').addEventListener('click',e=>{
 $('rkQ').addEventListener('input',()=>renderRack());
 $('rkcGo').onclick=()=>{const name=$('rkcName').value.trim();if(!name){toast('Give the kit a name first');$('rkcName').focus();return;}
   rkAdd({t:$('rkcT').value,name,h:Math.max(1,+$('rkcU').value|0),d:Math.max(0,+$('rkcD').value||0),side:rkSide});};
-$('rkList').addEventListener('click',e=>{const r=e.target.closest('[data-rkrow]');if(!r)return;rkSel=r.dataset.rkrow;const it=RK().items.find(i=>i.id===rkSel);if(it)rkSide=it.side;renderRack();});
+$('rkList').addEventListener('click',e=>{const r=e.target.closest('[data-rkrow]');if(!r)return;rkSel=r.dataset.rkrow;const it=RK().items.find(i=>i.id===rkSel);if(it){rkSide=it.side;dvU=it.u;}renderRack();});
 for(const [id,k,cast] of [['rkName','name'],['rkJob','job'],['rkU','U',v=>Math.max(1,Math.min(48,v|0))],['rkD','depth',v=>Math.max(100,Math.min(1200,+v||500))],['rkRails','rails']])
   $(id).addEventListener('change',e=>{rkPushUndo();RK()[k]=cast?cast(e.target.value):e.target.value;persist();renderRack();});
 $('rkSel').addEventListener('change',e=>{curRack=+e.target.value;rkSel=null;rkUndoS=[];rkRedoS=[];persist();renderRack();});
@@ -1938,7 +2014,7 @@ $('rkPdf').onclick=async()=>{
   if(!window.jspdf){toast('PDF library didn’t load. Check your connection and reload.');return;}
   const rk=RK(),{jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a3'}),PW=420,PH=297,RH=rk.U*RU;
   const k=Math.min(0.34,215/RH), ew=RW*k, gap=34, ox1=(PW-2*ew-gap)/2, ox2=ox1+ew+gap, oy=38;
-  const frame=pg=>{doc.setDrawColor(20);doc.setLineWidth(0.5);doc.rect(10,10,PW-20,PH-20);doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(20);doc.text('KUDOS AV',16,18);doc.setFont('helvetica','normal');doc.text(`${rk.name}${rk.job?' · '+rk.job:''}  ·  Sheet ${pg} of 2`,PW-16,18,{align:'right'});doc.setLineWidth(0.2);doc.line(10,22,PW-10,22);};
+  const frame=pg=>{doc.setDrawColor(20);doc.setLineWidth(0.5);doc.rect(10,10,PW-20,PH-20);doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(20);doc.text('KUDOS AV',16,18);doc.setFont('helvetica','normal');doc.text(`${rk.name}${rk.job?' · '+rk.job:''}  ·  Sheet ${pg} of 3`,PW-16,18,{align:'right'});doc.setLineWidth(0.2);doc.line(10,22,PW-10,22);};
   frame(1);
   const elev=(side,ox)=>{
     doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(20);doc.text(side==='front'?'FRONT':'REAR',ox+ew/2,oy-6,{align:'center'});
@@ -1959,12 +2035,27 @@ $('rkPdf').onclick=async()=>{
     ...(list.length?list.map(w=>(w.lvl==='bad'?'PROBLEM: ':'Check: ')+w.msg):['Everything fits: no overlaps, front + rear depths within the rack.'])];
   let ny=PH-35;for(const n of notes.slice(0,6)){const w=doc.splitTextToSize(n,380);doc.text(w,16,ny);ny+=w.length*3.6;}
   doc.setFontSize(7);doc.setTextColor(90);doc.text(`${today()} · Not to scale`,PW-16,PH-14,{align:'right'});
-  // page 2 — kit list
-  doc.addPage('a3','landscape');frame(2);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20);doc.text('KIT LIST',16,32);
+  // page 2 — depth side view
+  doc.addPage('a3','landscape');frame(2);
+  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20);doc.text('DEPTH — SIDE VIEW',16,32);
+  doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(90);doc.text('Front rails on the left. Blue = front-mounted, orange = rear-mounted. The right-hand figure is the space left for cables at each U.',16,37);
+  {const D=rk.depth,lx=90,avail=PW-lx-60,kk=Math.min(avail/D,0.6),rowH=Math.min(14,(PH-70)/rk.U),top=46;
+   doc.setDrawColor(150);doc.setLineWidth(0.1);
+   for(let d=0;d<=D;d+=100){const x=lx+d*kk;doc.setDrawColor(225);doc.line(x,top,x,top+rk.U*rowH);doc.setTextColor(120);doc.setFontSize(6.5);doc.text(String(d),x,top+rk.U*rowH+4,{align:'center'});}
+   for(let u=rk.U;u>=1;u--){const y=top+(rk.U-u)*rowH;const f=rkDepthAt(rk,u,'front'),r=rkDepthAt(rk,u,'rear'),gap=Math.round(D-f.max-r.max);
+     doc.setDrawColor(230);doc.line(lx,y+rowH,lx+D*kk,y+rowH);doc.setTextColor(90);doc.setFontSize(7);doc.text('U'+u,16,y+rowH/2+1);
+     const names=[...f.its,...r.its].filter(i=>!CARRIER(i.t)).map(i=>rkName(i));doc.setTextColor(20);let nm=names.slice(0,2).join(', ')+(names.length>2?' +'+(names.length-2):'');while(nm.length>4&&doc.getTextWidth(nm)>lx-30)nm=nm.slice(0,-2)+'…';doc.text(nm||'—',lx-3,y+rowH/2+1,{align:'right'});
+     for(const [side,set] of [['front',f],['rear',r]])for(const it of set.its){const d=+it.d||0,x=side==='front'?lx:lx+(D-d)*kk;
+       if(CARRIER(it.t)){doc.setDrawColor(140);doc.setLineDashPattern([1,0.8],0);doc.rect(x,y+1,d*kk,rowH-2);doc.setLineDashPattern([],0);}
+       else{side==='front'?doc.setFillColor(59,95,158):doc.setFillColor(170,110,58);doc.rect(x,y+1,Math.max(0.5,d*kk),rowH-2,'F');}}
+     if(f.its.length||r.its.length){gap<0?doc.setTextColor(200,40,40):gap<30?doc.setTextColor(200,110,20):doc.setTextColor(30,120,70);doc.setFontSize(7);doc.text(gap<0?`over by ${-gap} mm`:`${gap} mm`,lx+D*kk+4,y+rowH/2+1);}}
+   doc.setDrawColor(60);doc.setLineWidth(0.4);doc.line(lx,top,lx,top+rk.U*rowH);if(rk.rails!=='front')doc.line(lx+D*kk,top,lx+D*kk,top+rk.U*rowH);}
+  // page 3 — kit list
+  doc.addPage('a3','landscape');frame(3);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20);doc.text('KIT LIST',16,32);
   const cols=[['U',20],['Side',16],['Item',92],['Brand / part',80],['Size',26],['Depth',20],['Held by',60],['Notes',72]];let y=42;
   doc.setFillColor(235,238,242);doc.rect(16,y-4,cols.reduce((a,c)=>a+c[1],0),6.5,'F');doc.setFontSize(8);let x=16;for(const [hh,w] of cols){doc.text(hh,x+1.5,y);x+=w;}doc.setFont('helvetica','normal');y+=6;
   for(const it of rkRowsSorted(rk)){const h=rkH(it);const w=rkW(it),c=rkCarrierOf(rk,it);const cells=[h>1?`${it.u+h-1}–${it.u}`:String(it.u),it.side==='front'?'Front':'Rear',rkName(it),it.t==='panel'?'Custom panel':[it.brand,it.part].filter(Boolean).join(' '),h+'U'+(w>=1?'':w===0.5?' 1/2':' 1/3'),(+it.d||0)+' mm',c?rkName(c):'',it.notes||''];
-    const wr=cells.map((c,i)=>doc.splitTextToSize(String(c),cols[i][1]-3));const rh=Math.max(...wr.map(w=>w.length))*3.4+2.4;if(y+rh>PH-16){doc.addPage('a3','landscape');frame(2);y=32;}
+    const wr=cells.map((c,i)=>doc.splitTextToSize(String(c),cols[i][1]-3));const rh=Math.max(...wr.map(w=>w.length))*3.4+2.4;if(y+rh>PH-16){doc.addPage('a3','landscape');frame(3);y=32;}
     x=16;wr.forEach((w,i)=>{doc.text(w,x+1.5,y);x+=cols[i][1];});doc.setDrawColor(215);doc.setLineWidth(0.1);doc.line(16,y+rh-3.2,16+cols.reduce((a,c)=>a+c[1],0),y+rh-3.2);y+=rh;}
   await saveFile(rkSlug()+'-rack.pdf',new Uint8Array(doc.output('arraybuffer')),'application/pdf');
 };
