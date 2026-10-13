@@ -185,6 +185,18 @@ a{color:var(--accent)}
             <button class="btn primary full" id="rGo">Add row</button>
           </div>
         </details>
+        <details id="veamForm">
+          <summary>VEAM break-out panel</summary>
+          <p class="note" style="margin:6px 0 0">Makes a new panel: VEAM multipin on the left, numbered XLRs beside it.</p>
+          <div class="formgrid">
+            <label class="field full"><span>VEAM</span><select id="vbV"><option value="tl13">4-way (13-pin)</option><option value="tl25" selected>8-way (25-pin)</option><option value="tl37">12-way (37-pin)</option><option value="tl54">16-way (54-pin)</option><option value="tl72">24-way (72-pin)</option><option value="tl85">24/28-way (85-pin)</option><option value="tl150">48-way (150-pin)</option><option value="tl201">64-way (201-pin)</option></select></label>
+            <label class="field"><span>XLRs</span><select id="vbX"><option value="nc3fd">Female (inputs)</option><option value="nc3md">Male (outputs)</option></select></label>
+            <label class="field"><span>Channels</span><input id="vbN" type="number" min="1" max="64" value="8"></label>
+            <label class="field"><span>Label prefix</span><input id="vbP" placeholder="e.g. CH "></label>
+            <label class="field"><span>Link-out VEAM</span><select id="vbT"><option value="0">No</option><option value="1">Yes, second VEAM</option></select></label>
+            <button class="btn primary full" id="vbGo">Create break-out panel</button>
+          </div>
+        </details>
         <details id="custForm">
           <summary>Custom part</summary>
           <p class="note" style="margin:6px 0 0">For anything not listed. Take the sizes from the maker's cutout drawing.</p>
@@ -390,6 +402,18 @@ DEV('custom','Custom device box','Set size in the inspector',200,44,200,'Enter t
 DEV('macmini4','Mac mini (M4)','127 × 50 × 127',127,50,127,'Apple spec: 12.7 cm square, 5.0 cm tall.');
 DEV('macstudio','Mac Studio','197 × 95 × 197',197,95,197,'Apple spec: 19.7 cm square, 9.5 cm tall.');
 DEV('appletv','Apple TV 4K','93 × 31 × 93',93,31,93,'Apple spec: 9.3 cm square, 3.1 cm tall.');
+// VEAM audio multipins — Ten47 Tourline panel receptacles (front mount, square flange, 4 screws). Female (…PF26) and male (…PM02) share the cutout.
+const TL47='https://ten47.com/wp-content/uploads/sites/3/2023/03/Tourline-Catalogue-2026-ENG.pdf';
+const VEAM=(id,ways,pins,cut,hd,pitch,fl,nut,parts,extra='')=>add('VEAM multipin (Ten47)',id,`VEAM ${ways}-way (${pins}-pin)`,parts,{cut:[circ(cut)],holes:q4(pitch,pitch,hd),flange:{w:fl,h:fl,r:2},desc:`Ø${cut} + 4×Ø${hd} on ${pitch} square`,conf:'high',
+  kw:`veam multipin multicore tourline ten47 ${ways} way ${pins} pin`,ways,note:`Ten47 Tourline, front mount. ${nut?`Coupling nut Ø${nut} on the female — keep other parts clear of it. `:''}Allow ~60 mm behind the panel for wiring.${extra}`,src:TL47});
+VEAM('tl13',4,13,30.0,3.4,29.4,38.1,51.5,'TL13PF26 / TL13PM02');
+VEAM('tl25',8,25,36.0,3.9,34.9,44.5,53,'TL25PF26 / TL25PM02 (Canford 47-113 / 47-114)');
+VEAM('tl37',12,37,42.0,3.9,39.7,50.8,61,'TL37PF26 / TL37PM02 (Canford 47-133 / 47-134)');
+VEAM('tl54',16,54,48.5,4.5,44.5,57,0,'TL54PF26 / TL54PM02 (Canford 47-143 / 47-144)');
+VEAM('tl72',24,72,42.0,3.9,39.7,50.8,61,'TL72PF26 / TL72PM02',' Ten47’s 24-ch insert. Many UK 24-way looms use the 85-pin instead — check the mating cable.');
+VEAM('tl85',28,85,61.0,4.5,55.6,69.8,79.5,'TL85PF26 / TL85PM02 (Canford 47-153 / 47-154)',' Canford sells this as 24-ch, Ten47 as 28-ch.');
+VEAM('tl150',48,150,61.0,4.5,55.6,69.8,79.5,'TL150PF26 / TL150PM02 (Canford 47-173 / 47-174)');
+VEAM('tl201',64,201,61.0,4.5,55.6,69.8,79.5,'TL201PF26 / TL201PM26',' Ten47 lists it as 67 ch.');
 // D-sub
 const DSUB=(id,name,pn,pitch,top,fw)=>add('D-sub','ds'+id,name,pn,{cut:[{t:'trap',top,bot:+(top-2*11.18*Math.tan(10*Math.PI/180)).toFixed(2),h:11.18}],holes:h2(pitch,3.2),flange:{w:fw,h:12.5,r:1},desc:`trapezoid ${top} top × 11.18 (10° sides) + 2×Ø3.2 at ${pitch} pitch`,conf:'high',src:'https://spectrumcontrol.com/asset/d-sub-board-panel-cutouts.pdf'});
 DSUB('9','D-sub 9 / HD-15 (VGA)','DE-9 / DE-15',24.99,19.74,30.8);
@@ -416,7 +440,7 @@ add('Fans & vents','vent6','Vent slots ×6','3 × 25 slots, 7 pitch',{cut:Array.
 
 // Short names for the drawing labels
 const SHORT={nc3fd:'XLR3 F',nc3md:'XLR3 M',nc4fd:'XLR4 F',nc4md:'XLR4 M',nj3fp6c:'JACK',ncj6fa:'COMBO',nc5fd:'XLR5 F',nc5md:'XLR5 M',socapex19:'SOCA 19',
-  ne8fdp:'etherCON',ne8fdx:'CAT6A',no2:'optCON DUO',no4:'optCON QUAD',no12:'MTP 12',nbb75dfg:'BNC',nbb75dfi:'BNC ISO',nausb:'USB',nahdmi:'HDMI',nausbc:'USB-C',usbcgen:'USB-C',usbckey:'USB-C',nausb3:'USB 3.0',nahdmib:'HDMI',dpgen:'DP',dpkey:'DP',hdmikey:'HDMI',nadb15:'VGA',nadb9:'DB9',dgen:'D-SIZE',bnc38:'BNC',keystone:'KEYSTONE',
+  ne8fdp:'etherCON',ne8fdx:'CAT6A',no2:'optCON DUO',no4:'optCON QUAD',no12:'MTP 12',nbb75dfg:'BNC',nbb75dfi:'BNC ISO',nausb:'USB',nahdmi:'HDMI',tl13:'VEAM 4',tl25:'VEAM 8',tl37:'VEAM 12',tl54:'VEAM 16',tl72:'VEAM 24',tl85:'VEAM 28',tl150:'VEAM 48',tl201:'VEAM 64',nausbc:'USB-C',usbcgen:'USB-C',usbckey:'USB-C',nausb3:'USB 3.0',nahdmib:'HDMI',dpgen:'DP',dpkey:'DP',hdmikey:'HDMI',nadb15:'VGA',nadb9:'DB9',dgen:'D-SIZE',bnc38:'BNC',keystone:'KEYSTONE',
   nac3mpa:'PCON IN',nac3mpb:'PCON OUT',nac3mpx:'TRUE1 IN',nac3mpxtop:'TRUE1 TOP IN',nac3fpxtop:'TRUE1 TOP OUT',c14s:'IEC C14',c14snap:'IEC C14',c14fuse:'IEC + FUSE',c13s:'IEC C13',
   cee16_3:'16A CEE',cee32_3:'32A CEE',cee16_5:'16A 5P',cee32_5:'32A 5P',fuse520:'FUSE',nl4mp:'NL4',nl2mp:'NL2',nl8mpr:'NL8',nl4mpr:'NL4',han16b:'HAN 16B',han24b:'HAN 24B',
   plsrc:'PLOCK SRC',pldrn:'PLOCK DRN',ds9:'DB9 / VGA',ds15:'DA15',ds25:'DB25',ds37:'DC37',toggle:'TOGGLE',pb12:'PB 12',pb16:'PB 16',pb19:'PB 19',pb22:'PB 22',estop22:'E-STOP',
@@ -1220,6 +1244,23 @@ window.addEventListener('resize',()=>renderCanvas());
 $('rowForm').addEventListener('toggle',()=>{const p=P();if(!$('rY').value)$('rY').value=f2(panelH(p)/2);if(!$('rX').value)$('rX').value=f2(rackW(p)/2);syncPitch();});
 function syncPitch(){const d=allDefs().find(x=>x.id===$('rPart').value);if(d)$('rPitch').value=(Math.ceil((d.flange.w+4)*2)/2);}
 $('rPart').addEventListener('change',syncPitch);
+$('vbV').addEventListener('change',()=>{const d=LIB.find(x=>x.id===$('vbV').value);if(d)$('vbN').value=d.ways;});
+$('vbGo').onclick=()=>{
+  const vid=$('vbV').value,v=LIB.find(x=>x.id===vid),xid=$('vbX').value,N=Math.max(1,Math.min(64,+$('vbN').value||8)),pre=$('vbP').value,thru=$('vbT').value==='1';
+  const W=482.6,rl=(W-450)/2,rr=W-rl,fw=v.flange.w,pitch=32,rowH=40;
+  const vx1=rl+6+fw/2, vx2=thru?vx1+fw+8:null, vRight=(thru?vx2:vx1)+fw/2;
+  const areaL=vRight+10, areaR=rr-4, maxRow=Math.max(1,Math.min(N,Math.floor((areaR-areaL-26)/pitch)+1)), rows=Math.ceil(N/maxRow), perRow=Math.ceil(N/rows); // balance the rows
+  const need=Math.max(rows*rowH+6,fw+14); let U=1;while(U*44.45-0.8<need&&U<8)U++;
+  const p=blankPanel(`VEAM ${v.ways}-way break-out`);p.U=U;const H=panelH(p);
+  p.items.push({id:uid(),kind:'part',part:vid,x:+vx1.toFixed(2),y:+(H/2+2).toFixed(2),rot:0,label:{text:thru?'MULTI IN':'MULTI',pos:'below',size:3}});
+  if(thru)p.items.push({id:uid(),kind:'part',part:vid,x:+vx2.toFixed(2),y:+(H/2+2).toFixed(2),rot:0,label:{text:'LINK',pos:'below',size:3}});
+  const yTop=H/2+(rows-1)*rowH/2+2;
+  for(let k=0;k<N;k++){const r=Math.floor(k/perRow),c=k%perRow,inRow=Math.min(perRow,N-r*perRow);
+    const span=(inRow-1)*pitch, x0=areaL+((areaR-areaL)-span)/2;
+    p.items.push({id:uid(),kind:'part',part:xid,x:+(x0+c*pitch).toFixed(2),y:+(yTop-r*rowH).toFixed(2),rot:0,label:{text:`${pre}${k+1}`,pos:'below',size:3}});}
+  panels.push(p);cur=panels.length-1;sel.clear();loadHist();persist();renderAll();
+  toast(`Made a ${U}U ${v.ways}-way VEAM break-out with ${N} XLRs — wire channel 1 to pin pair 1 of the VEAM.`);
+};
 $('rGo').onclick=()=>{
   const p=P(),id=$('rPart').value,n=Math.max(1,Math.min(60,+$('rN').value||1)),pt=+$('rPitch').value,y=+$('rY').value,cx=+$('rX').value,pre=$('rPre').value,st=+$('rStart').value||1;
   pushUndo(); const ns=new Set();
